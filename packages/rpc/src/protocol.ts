@@ -48,7 +48,7 @@ const VALID_COMMANDS = new Set<RpcCommandName>([
   "new_session",
   "switch",
   "fork",
-  "tree_navigation"
+  "tree_navigation",
 ]);
 
 export interface RpcRequestBase {
@@ -122,14 +122,17 @@ export class JsonRpcProtocol implements RpcProtocol {
 
     const command = parsed.command;
     const id = parsed.id;
-    if (typeof id !== "string" || !VALID_COMMANDS.has(command as RpcCommandName)) {
+    if (
+      typeof id !== "string"
+      || !VALID_COMMANDS.has(command as RpcCommandName)
+    ) {
       return null;
     }
 
     return {
       id,
       command: command as RpcCommandName,
-      payload: (parsed as { payload?: RpcPayloads }).payload
+      payload: (parsed as { payload?: RpcPayloads }).payload,
     };
   }
 

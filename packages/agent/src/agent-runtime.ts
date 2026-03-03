@@ -1,4 +1,8 @@
-import type { AgentEvent, AgentMessage, QueueRequest } from "@pi-bun-effect/core";
+import type {
+  AgentEvent,
+  AgentMessage,
+  QueueRequest,
+} from "@pi-bun-effect/core";
 
 export interface AgentConfig {
   sessionId: string;
@@ -69,8 +73,8 @@ export class InMemoryAgentSession implements AgentSession {
       isRunning: false,
       queueDepth: {
         steer: 0,
-        followUp: 0
-      }
+        followUp: 0,
+      },
     };
   }
 
@@ -79,15 +83,21 @@ export class InMemoryAgentSession implements AgentSession {
   }
 
   async steer(input: TurnInput): Promise<TurnResult> {
-    return this.requestQueue({ queue: "steer", content: input.message.id } as const).then(() =>
-      this.executeTurn("steer", input.message.id)
-    );
+    return this.requestQueue(
+      {
+        queue: "steer",
+        content: input.message.id,
+      } as const,
+    ).then(() => this.executeTurn("steer", input.message.id));
   }
 
   async followUp(input: TurnInput): Promise<TurnResult> {
-    return this.requestQueue({ queue: "followUp", content: input.message.id } as const).then(() =>
-      this.executeTurn("followUp", input.message.id)
-    );
+    return this.requestQueue(
+      {
+        queue: "followUp",
+        content: input.message.id,
+      } as const,
+    ).then(() => this.executeTurn("followUp", input.message.id));
   }
 
   async requestQueue(request: QueueRequest): Promise<void> {
@@ -107,7 +117,7 @@ export class InMemoryAgentSession implements AgentSession {
         type: "abort",
         sessionId: this.state.sessionId,
         turnId: this.state.currentTurnId,
-        at: nowIso()
+        at: nowIso(),
       });
     }
   }
@@ -120,7 +130,7 @@ export class InMemoryAgentSession implements AgentSession {
   async getState(): Promise<AgentState> {
     return {
       ...this.state,
-      queueDepth: { ...this.state.queueDepth }
+      queueDepth: { ...this.state.queueDepth },
     };
   }
 
@@ -131,31 +141,55 @@ export class InMemoryAgentSession implements AgentSession {
     };
   }
 
-  private async executeTurn(mode: string, sourceId: string): Promise<TurnResult> {
+  private async executeTurn(
+    mode: string,
+    sourceId: string,
+  ): Promise<TurnResult> {
     const turnId = makeId();
     this.state.currentTurnId = turnId;
     this.state.isRunning = true;
 
     const events: AgentEvent[] = [
-      { type: "agent_start", sessionId: this.state.sessionId, turnId, at: nowIso() },
-      { type: "turn_start", sessionId: this.state.sessionId, turnId, at: nowIso() },
-      { type: "text_start", sessionId: this.state.sessionId, turnId, at: nowIso(), text: `mode=${mode}` },
+      {
+        type: "agent_start",
+        sessionId: this.state.sessionId,
+        turnId,
+        at: nowIso(),
+      },
+      {
+        type: "turn_start",
+        sessionId: this.state.sessionId,
+        turnId,
+        at: nowIso(),
+      },
+      {
+        type: "text_start",
+        sessionId: this.state.sessionId,
+        turnId,
+        at: nowIso(),
+        text: `mode=${mode}`,
+      },
       {
         type: "text_delta",
         sessionId: this.state.sessionId,
         turnId,
         at: nowIso(),
-        text: `received=${sourceId}`
+        text: `received=${sourceId}`,
       },
-      { type: "text_end", sessionId: this.state.sessionId, turnId, at: nowIso(), text: ""
+      {
+        type: "text_end",
+        sessionId: this.state.sessionId,
+        turnId,
+        at: nowIso(),
+        text: "",
       },
       {
         type: "done",
         sessionId: this.state.sessionId,
         turnId,
         at: nowIso(),
-        stopReason: "stop"
-      } as AgentEvent
+        stopReason: "stop",
+      } as AgentEvent,
     ];
 
     for (const event of events) {
@@ -174,7 +208,7 @@ export class InMemoryAgentSession implements AgentSession {
 
     this.state.queueDepth = {
       steer: this.queueDepth.steer,
-      followUp: this.queueDepth.followUp
+      followUp: this.queueDepth.followUp,
     };
 
     return { events, finalState: this.state };

@@ -38,7 +38,7 @@ function defaultRunner(command: string): Promise<CommandResult> {
   return Promise.resolve({
     stdout: process.stdout.toString(),
     stderr: process.stderr.toString(),
-    exitCode: process.exitCode
+    exitCode: process.exitCode,
   });
 }
 
@@ -50,7 +50,7 @@ export class InMemoryPodManager implements PodManager {
     private readonly options: {
       commandRunner?: PodCommandRunner;
       basePort?: number;
-    } = {}
+    } = {},
   ) {}
 
   async setup(config: PodConfig): Promise<void> {
@@ -59,7 +59,7 @@ export class InMemoryPodManager implements PodManager {
       provider: config.provider,
       sshHost: config.sshHost,
       contextWindow: config.contextWindow ?? 8192,
-      gpuMemoryGb: config.gpuMemoryGb ?? 24
+      gpuMemoryGb: config.gpuMemoryGb ?? 24,
     };
   }
 
@@ -68,8 +68,9 @@ export class InMemoryPodManager implements PodManager {
       throw new Error("pod not configured");
     }
     const command = this.renderStartCommand(modelId);
-    const runner = this.options.commandRunner ?? defaultRunner;
-    const result = await runner.run(command);
+    const result = this.options.commandRunner
+      ? await this.options.commandRunner.run(command)
+      : await defaultRunner(command);
     if (result.exitCode !== 0) {
       throw new Error(`start model failed: ${result.stderr || result.stdout}`);
     }
@@ -95,16 +96,20 @@ export class InMemoryPodManager implements PodManager {
     if (!this.podConfig) {
       throw new Error("pod not configured");
     }
-    return `http://${this.podConfig.sshHost}:11434/v1/models/${encodeURIComponent(modelId)}`;
+    return `http://${this.podConfig.sshHost}:11434/v1/models/${
+      encodeURIComponent(modelId)
+    }`;
   }
 
   renderStartCommand(modelId: string): string {
     if (!this.podConfig) {
       throw new Error("pod not configured");
     }
-    return `python3 -m vllm.entrypoints.openai.api_server --model ${JSON.stringify(
-      modelId
-    )} --host 0.0.0.0 --port 11434 --max-num-seqs 32`;
+    return `python3 -m vllm.entrypoints.openai.api_server --model ${
+      JSON.stringify(
+        modelId,
+      )
+    } --host 0.0.0.0 --port 11434 --max-num-seqs 32`;
   }
 }
 

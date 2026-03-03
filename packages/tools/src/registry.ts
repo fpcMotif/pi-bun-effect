@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
 import type { AgentMessage } from "@pi-bun-effect/core";
 import type { Capability, TrustDecision } from "@pi-bun-effect/extensions";
+import { randomUUID } from "node:crypto";
 
 export interface ToolContext {
   sessionId: string;
@@ -32,7 +32,10 @@ export interface ToolRegistry {
   unregister(name: string): void;
   get(name: string): ToolDefinition | undefined;
   list(): ToolDefinition[];
-  execute(context: ToolContext, invocation: ToolInvocation): Promise<ToolOutput>;
+  execute(
+    context: ToolContext,
+    invocation: ToolInvocation,
+  ): Promise<ToolOutput>;
 }
 
 export interface BuiltinTools {
@@ -48,7 +51,9 @@ const READ_TOOL: ToolDefinition = {
   async run(_context, invocation) {
     const path = String(invocation.input.path ?? "");
     const encoder = new TextEncoder();
-    const data = await (typeof Bun !== "undefined" ? Bun.file(path).text() : Promise.resolve(""));
+    const data = await (typeof Bun !== "undefined"
+      ? Bun.file(path).text()
+      : Promise.resolve(""));
     return {
       content: {
         type: "toolResult",
@@ -61,15 +66,15 @@ const READ_TOOL: ToolDefinition = {
         content: [
           {
             type: "text",
-            text: data
-          }
-        ]
+            text: data,
+          },
+        ],
       },
       debug: {
-        bytes: encoder.encode(data).byteLength
-      }
+        bytes: encoder.encode(data).byteLength,
+      },
     };
-  }
+  },
 };
 
 const WRITE_TOOL: ToolDefinition = {
@@ -94,12 +99,12 @@ const WRITE_TOOL: ToolDefinition = {
         content: [
           {
             type: "text",
-            text: `wrote=${path}`
-          }
-        ]
-      }
+            text: `wrote=${path}`,
+          },
+        ],
+      },
     };
-  }
+  },
 };
 
 const EDIT_TOOL: ToolDefinition = {
@@ -109,7 +114,9 @@ const EDIT_TOOL: ToolDefinition = {
     const path = String(invocation.input.path ?? "");
     const find = String(invocation.input.find ?? "");
     const replace = String(invocation.input.replace ?? "");
-    const original = typeof Bun !== "undefined" ? await Bun.file(path).text() : "";
+    const original = typeof Bun !== "undefined"
+      ? await Bun.file(path).text()
+      : "";
     const next = original.replaceAll(find, replace);
     if (typeof Bun !== "undefined") {
       await Bun.write(path, next);
@@ -126,12 +133,12 @@ const EDIT_TOOL: ToolDefinition = {
         content: [
           {
             type: "text",
-            text: `edited=${path}`
-          }
-        ]
-      }
+            text: `edited=${path}`,
+          },
+        ],
+      },
     };
-  }
+  },
 };
 
 const BASH_TOOL: ToolDefinition = {
@@ -153,10 +160,10 @@ const BASH_TOOL: ToolDefinition = {
           content: [
             {
               type: "text",
-              text: "no command provided"
-            }
-          ]
-        }
+              text: "no command provided",
+            },
+          ],
+        },
       };
     }
 
@@ -173,10 +180,10 @@ const BASH_TOOL: ToolDefinition = {
           content: [
             {
               type: "text",
-              text: `mock-run:${command}`
-            }
-          ]
-        }
+              text: `mock-run:${command}`,
+            },
+          ],
+        },
       };
     }
 
@@ -196,15 +203,15 @@ const BASH_TOOL: ToolDefinition = {
         content: [
           {
             type: "text",
-            text: output || error || `exit=${process.exitCode}`
-          }
-        ]
+            text: output || error || `exit=${process.exitCode}`,
+          },
+        ],
       },
       debug: {
-        exitCode: process.exitCode
-      }
+        exitCode: process.exitCode,
+      },
     };
-  }
+  },
 };
 
 export class InMemoryToolRegistry implements ToolRegistry {
@@ -226,7 +233,10 @@ export class InMemoryToolRegistry implements ToolRegistry {
     return Array.from(this.definitions.values());
   }
 
-  async execute(context: ToolContext, invocation: ToolInvocation): Promise<ToolOutput> {
+  async execute(
+    context: ToolContext,
+    invocation: ToolInvocation,
+  ): Promise<ToolOutput> {
     const definition = this.definitions.get(invocation.name);
     if (!definition) {
       throw new Error(`tool not found: ${invocation.name}`);
@@ -248,7 +258,7 @@ export const builtinTools: BuiltinTools = {
   },
   registerBashTool(registry) {
     registry.register(BASH_TOOL);
-  }
+  },
 };
 
 export function createToolRegistry(): ToolRegistry {

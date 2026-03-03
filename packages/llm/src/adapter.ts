@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
 import type { AgentMessage } from "@pi-bun-effect/core";
+import { randomUUID } from "node:crypto";
 
 export type ProviderId = "openai" | "anthropic" | "google" | "custom";
 
@@ -16,7 +16,14 @@ export interface Usage {
 }
 
 export interface LlmEvent {
-  type: "start" | "text_delta" | "toolcall_start" | "toolcall_delta" | "toolcall_end" | "done" | "error";
+  type:
+    | "start"
+    | "text_delta"
+    | "toolcall_start"
+    | "toolcall_delta"
+    | "toolcall_end"
+    | "done"
+    | "error";
   payload?: string;
 }
 
@@ -29,7 +36,7 @@ export interface LlmOptions {
 export class LlmError extends Error {
   constructor(
     message: string,
-    public readonly code = "LLM_ERROR"
+    public readonly code = "LLM_ERROR",
   ) {
     super(message);
   }
@@ -43,8 +50,16 @@ export interface LlmStreamResult {
 export interface LlmProvider {
   configure(apiKey: string, baseUrl?: string): Promise<void>;
   modelRegistry(): Promise<LlmModelId[]>;
-  stream(model: LlmModelId, context: AgentMessage[], options?: LlmOptions): LlmStreamResult;
-  complete(model: LlmModelId, context: AgentMessage[], options?: LlmOptions): Promise<AgentMessage>;
+  stream(
+    model: LlmModelId,
+    context: AgentMessage[],
+    options?: LlmOptions,
+  ): LlmStreamResult;
+  complete(
+    model: LlmModelId,
+    context: AgentMessage[],
+    options?: LlmOptions,
+  ): Promise<AgentMessage>;
 }
 
 export interface LlmProviderFactory {
@@ -52,10 +67,19 @@ export interface LlmProviderFactory {
 }
 
 const defaultModels: Record<ProviderId, LlmModelId[]> = {
-  openai: [{ provider: "openai", modelId: "gpt-4o" }, { provider: "openai", modelId: "gpt-4o-mini" }],
-  anthropic: [{ provider: "anthropic", modelId: "claude-3.5-sonnet" }, { provider: "anthropic", modelId: "claude-3-haiku" }],
-  google: [{ provider: "google", modelId: "gemini-2.0-flash" }, { provider: "google", modelId: "gemini-1.5-pro" }],
-  custom: []
+  openai: [
+    { provider: "openai", modelId: "gpt-4o" },
+    { provider: "openai", modelId: "gpt-4o-mini" },
+  ],
+  anthropic: [
+    { provider: "anthropic", modelId: "claude-3.5-sonnet" },
+    { provider: "anthropic", modelId: "claude-3-haiku" },
+  ],
+  google: [
+    { provider: "google", modelId: "gemini-2.0-flash" },
+    { provider: "google", modelId: "gemini-1.5-pro" },
+  ],
+  custom: [],
 };
 
 function toolCallPayloadFromContext(context: AgentMessage[]): string {
@@ -79,14 +103,24 @@ export class ReplayLlmProvider implements LlmProvider {
     return defaultModels[this.provider] ?? [];
   }
 
-  stream(model: LlmModelId, context: AgentMessage[], options?: LlmOptions): LlmStreamResult {
+  stream(
+    model: LlmModelId,
+    context: AgentMessage[],
+    options?: LlmOptions,
+  ): LlmStreamResult {
     const events: LlmEvent[] = [
-      { type: "start", payload: JSON.stringify({ model: model.modelId, temperature: options?.temperature ?? 0.5 }) },
+      {
+        type: "start",
+        payload: JSON.stringify({
+          model: model.modelId,
+          temperature: options?.temperature ?? 0.5,
+        }),
+      },
       { type: "text_delta", payload: `provider=${model.provider}` },
       { type: "toolcall_start", payload: `tool:${model.modelId}` },
       { type: "toolcall_delta", payload: toolCallPayloadFromContext(context) },
       { type: "toolcall_end", payload: toolCallPayloadFromContext(context) },
-      { type: "done", payload: "" }
+      { type: "done", payload: "" },
     ];
 
     async function* toGenerator(): AsyncGenerator<LlmEvent> {
@@ -100,13 +134,24 @@ export class ReplayLlmProvider implements LlmProvider {
       usage: {
         inputTokens: context.length,
         outputTokens: Math.max(1, context.length),
-        totalCostUsd: context.length > 10 ? 0.001 : 0
-      }
+        totalCostUsd: context.length > 10 ? 0.001 : 0,
+      },
     };
   }
 
-  async complete(model: LlmModelId, context: AgentMessage[], options?: LlmOptions): Promise<AgentMessage> {
-    await Promise.resolve({ model, options, provider: this.provider, baseUrl: this.baseUrl } as const);
+  async complete(
+    model: LlmModelId,
+    context: AgentMessage[],
+    options?: LlmOptions,
+  ): Promise<AgentMessage> {
+    await Promise.resolve(
+      {
+        model,
+        options,
+        provider: this.provider,
+        baseUrl: this.baseUrl,
+      } as const,
+    );
     return {
       type: "assistant",
       role: "assistant",
@@ -116,15 +161,17 @@ export class ReplayLlmProvider implements LlmProvider {
       content: [
         {
           type: "text",
-          text: `replayed by ${this.provider}::${model.modelId}`
-        }
-      ]
+          text: `replayed by ${this.provider}::${model.modelId}`,
+        },
+      ],
     };
   }
 }
 
 export class LlmProviderRegistry {
-  constructor(private readonly factories: Partial<Record<ProviderId, LlmProviderFactory>>) {}
+  constructor(
+    private readonly factories: Partial<Record<ProviderId, LlmProviderFactory>>,
+  ) {}
 
   create(provider: ProviderId): LlmProvider {
     const factory = this.factories[provider];
@@ -152,7 +199,7 @@ export function createMockLlmProvider(modelEvents: LlmEvent[]): LlmProvider {
         }
       }
       return {
-        stream: emitter()
+        stream: emitter(),
       };
     },
     async complete(model) {
@@ -165,10 +212,10 @@ export function createMockLlmProvider(modelEvents: LlmEvent[]): LlmProvider {
         content: [
           {
             type: "text",
-            text: "mock-complete"
-          }
-        ]
+            text: "mock-complete",
+          },
+        ],
       };
-    }
+    },
   };
 }

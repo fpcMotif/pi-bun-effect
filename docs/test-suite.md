@@ -13,6 +13,7 @@ Bun provides a native `bun test` runner and supports coverage from the runtime/t
 Core parsing and invariants:
 
 Session JSONL v3 parser/serializer:
+
 - header parsing
 - entry ID format
 - `parentId` tree integrity
@@ -20,18 +21,22 @@ Session JSONL v3 parser/serializer:
 - “do not cut at tool results” invariants used by compaction
 
 Tool argument validation and message conversion:
+
 - type-safe schemas
 
 Partial tool-call JSON assembly:
+
 - ensure streaming `toolcall_delta` events produce exactly the same JSON object as final tool call after incremental parsing
 
 Policy engine:
+
 - command classification
 - allow/deny enforcement
 - “capability gate + mediation” sequencing
 - audit record formatting
 
 Search ranking:
+
 - deterministic scoring math
 - frecency decay function
 - git status weighting
@@ -39,9 +44,11 @@ Search ranking:
 Suggested unit test vectors:
 
 SessionEntry append ordering for branching:
+
 - create messages A→B→C, then branch from B to D, ensure `parentId` tree has two children at B and tree traversal returns correct linearization.
 
 Compaction cut points:
+
 - build a session with a tool call and tool result; force compaction cut point near that area; assert cut never separates tool result.
 
 ## Conformance tests (fixture-based)
@@ -72,12 +79,14 @@ End-to-end workflows (no real provider calls):
 Include tests for session export pipeline if implemented.
 
 vLLM pods manager:
+
 - mocked SSH layer
 - validate config persistence
 - argument rendering
 - endpoint derivation
 
 Slack bot (optional):
+
 - simulate Slack events
 - ensure per-channel contexts and log layout behavior
 
@@ -91,9 +100,11 @@ Binary smoke tests across OS (Linux/macOS/Windows):
 ## Fuzzing / property-based testing
 
 Streaming parser fuzzing:
+
 - randomized chunk boundaries and unicode edge cases for partial JSON tool-call assembly
 
 Session JSONL reader fuzzing:
+
 - random line breaks and truncated entries to ensure graceful errors and no silent corruption
 
 ## Benchmarks and profiling strategy
@@ -103,23 +114,29 @@ Benchmarks should be reproducible and scenario-based.
 Minimum benchmark scenarios:
 
 Startup p95:
+
 - `pi --version` and interactive mode "time to first prompt"
 
 Resume p95:
+
 - open a session with N entries and render initial UI state
 
 Tool latency:
+
 - read/write/edit and grep across large files
 
 Search p95:
+
 - fuzzy file search on large repo targets with git status and frecency weighting
 
 SQLite index operations:
+
 - insert/query cost for session metadata and search indices
 
 Profiling approach:
 
 Scenario harnesses run under Bun with deterministic inputs and collect:
+
 - wall-clock (p50/p95/p99)
 - RSS / heap snapshots at checkpoints
 - event-loop stalls (if measurable)

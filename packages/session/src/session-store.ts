@@ -1,6 +1,6 @@
+import { type AgentMessage, isAgentMessage } from "@pi-bun-effect/core";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { type AgentMessage, isAgentMessage } from "@pi-bun-effect/core";
 
 export type SessionVersion = 1 | 2 | 3;
 
@@ -27,7 +27,12 @@ export interface ParsedSession {
 export interface SessionStore {
   open(path: string): Promise<void>;
   readHeader(path: string): Promise<SessionHeader>;
-  append(path: string, entry: Omit<JsonlSessionEntry, "id" | "timestamp"> & Partial<Pick<JsonlSessionEntry, "id" | "timestamp">>): Promise<JsonlSessionEntry>;
+  append(
+    path: string,
+    entry:
+      & Omit<JsonlSessionEntry, "id" | "timestamp">
+      & Partial<Pick<JsonlSessionEntry, "id" | "timestamp">>,
+  ): Promise<JsonlSessionEntry>;
   readAll(path: string): Promise<JsonlSessionEntry[]>;
   migrate(path: string): Promise<SessionVersion>;
   fork(path: string, branchParentId: string): Promise<string>;
@@ -56,19 +61,19 @@ function parseJsonLine(line: string, index: number): unknown {
 
   try {
     return JSON.parse(line);
-  } catch (_error) {
+  } catch {
     throw new Error(`Malformed JSON at line ${index + 1}`);
   }
 }
 
 function isHeader(value: unknown): value is SessionHeader {
   return (
-    !!value &&
-    typeof value === "object" &&
-    "version" in value &&
-    "id" in value &&
-    (value as { version: unknown }).version !== undefined &&
-    [1, 2, 3].includes((value as { version: number }).version)
+    !!value
+    && typeof value === "object"
+    && "version" in value
+    && "id" in value
+    && (value as { version: unknown }).version !== undefined
+    && [1, 2, 3].includes((value as { version: number }).version)
   );
 }
 
@@ -78,10 +83,10 @@ function toEntry(value: unknown): JsonlSessionEntry {
   }
   const candidate = value as Partial<JsonlSessionEntry>;
   if (
-    typeof candidate.id !== "string" ||
-    typeof candidate.type !== "string" ||
-    typeof candidate.timestamp !== "string" ||
-    !isAgentMessage(candidate.data)
+    typeof candidate.id !== "string"
+    || typeof candidate.type !== "string"
+    || typeof candidate.timestamp !== "string"
+    || !isAgentMessage(candidate.data)
   ) {
     throw new Error("Invalid session entry");
   }
@@ -94,7 +99,12 @@ function readJsonl(text: string): ParsedSession {
     throw new Error("Session file is empty");
   }
 
-  const parsedHeader = parseJsonLine(lines[0], 0);
+  const headerLine = lines[0];
+  if (headerLine === undefined) {
+    throw new Error("Session file is empty");
+  }
+
+  const parsedHeader = parseJsonLine(headerLine, 0);
   if (!isHeader(parsedHeader)) {
     throw new Error("Invalid session header");
   }
@@ -103,12 +113,17 @@ function readJsonl(text: string): ParsedSession {
     version: parsedHeader.version as SessionVersion,
     id: parsedHeader.id,
     createdAt: parsedHeader.createdAt,
-    updatedAt: (parsedHeader as SessionHeader).updatedAt
+    updatedAt: (parsedHeader as SessionHeader).updatedAt,
   };
 
   const entries: JsonlSessionEntry[] = [];
   for (let i = 1; i < lines.length; i++) {
-    const parsed = parseJsonLine(lines[i], i);
+    const line = lines[i];
+    if (line === undefined) {
+      continue;
+    }
+
+    const parsed = parseJsonLine(line, i);
     if (parsed === null) {
       continue;
     }
@@ -127,23 +142,20 @@ function stringifyEntry(entry: JsonlSessionEntry): string {
 }
 
 export class JsonlSessionStore implements SessionStore {
-  constructor() {}
-
   async open(path: string): Promise<void> {
     const directory = dirname(path);
     try {
       await access(path);
-    } catch (_error) {
+    } catch {
       await mkdir(directory, { recursive: true });
       const header = {
         version: 3 as const,
         id: `${makeId()}`,
         createdAt: nowIso(),
-        updatedAt: nowIso()
+        updatedAt: nowIso(),
       };
       await writeFile(path, `${stringifyHeader(header)}\n`, "utf8");
     }
-    await this.migrate(path);
   }
 
   async readHeader(path: string): Promise<SessionHeader> {
@@ -153,13 +165,15 @@ export class JsonlSessionStore implements SessionStore {
 
   async append(
     path: string,
-    entry: Omit<JsonlSessionEntry, "id" | "timestamp"> & Partial<Pick<JsonlSessionEntry, "id" | "timestamp">>
+    entry:
+      & Omit<JsonlSessionEntry, "id" | "timestamp">
+      & Partial<Pick<JsonlSessionEntry, "id" | "timestamp">>,
   ): Promise<JsonlSessionEntry> {
     await this.open(path);
     const prepared = {
       ...entry,
       id: entry.id ?? makeId(),
-      timestamp: entry.timestamp ?? nowIso()
+      timestamp: entry.timestamp ?? nowIso(),
     };
     await appendLine(path, stringifyEntry(prepared));
     return prepared;
@@ -170,7 +184,8 @@ export class JsonlSessionStore implements SessionStore {
   }
 
   async migrate(path: string): Promise<SessionVersion> {
-    const { header, entries } = await this.readAllInternal(path);
+    const raw = await readFile(path, "utf8");
+    const { header, entries } = readJsonl(raw);
 
     if (header.version === 3) {
       return 3;
@@ -180,9 +195,11 @@ export class JsonlSessionStore implements SessionStore {
       version: 3,
       id: header.id,
       createdAt: header.createdAt,
-      updatedAt: nowIso()
+      updatedAt: nowIso(),
     };
-    const body = `${stringifyHeader(migrated)}\n${entries.map(stringifyEntry).join("\n")}${entries.length > 0 ? "\n" : ""}`;
+    const body = `${stringifyHeader(migrated)}\n${
+      entries.map(stringifyEntry).join("\n")
+    }${entries.length > 0 ? "\n" : ""}`;
     await writeFile(path, body, "utf8");
     return 3;
   }
@@ -202,19 +219,25 @@ export class JsonlSessionStore implements SessionStore {
       data: {
         ...target.data,
         id: makeId(),
-        timestamp: target.timestamp
-      }
+        timestamp: target.timestamp,
+      },
     };
     await this.append(path, branched);
     return branched.id;
   }
 
-  async switch(path: string, entryId: string): Promise<JsonlSessionEntry | null> {
+  async switch(
+    path: string,
+    entryId: string,
+  ): Promise<JsonlSessionEntry | null> {
     const entries = await this.readAllInternal(path);
     return entries.entries.find((entry) => entry.id === entryId) ?? null;
   }
 
-  async parent(path: string, entryId: string): Promise<JsonlSessionEntry | null> {
+  async parent(
+    path: string,
+    entryId: string,
+  ): Promise<JsonlSessionEntry | null> {
     return this.getParent(path, entryId);
   }
 
@@ -222,12 +245,18 @@ export class JsonlSessionStore implements SessionStore {
     return this.listChildren(path, parentId);
   }
 
-  async listChildren(path: string, parentId: string): Promise<JsonlSessionEntry[]> {
+  async listChildren(
+    path: string,
+    parentId: string,
+  ): Promise<JsonlSessionEntry[]> {
     const entries = await this.readAllInternal(path);
     return entries.entries.filter((entry) => entry.parentId === parentId);
   }
 
-  async getParent(path: string, entryId: string): Promise<JsonlSessionEntry | null> {
+  async getParent(
+    path: string,
+    entryId: string,
+  ): Promise<JsonlSessionEntry | null> {
     const entries = await this.readAllInternal(path);
     const node = entries.entries.find((entry) => entry.id === entryId);
     if (!node?.parentId) {
@@ -237,7 +266,10 @@ export class JsonlSessionStore implements SessionStore {
     return entries.entries.find((entry) => entry.id === node.parentId) ?? null;
   }
 
-  async linearizeFrom(path: string, entryId: string): Promise<JsonlSessionEntry[]> {
+  async linearizeFrom(
+    path: string,
+    entryId: string,
+  ): Promise<JsonlSessionEntry[]> {
     const entries = await this.readAllInternal(path);
     const map = new Map(entries.entries.map((entry) => [entry.id, entry]));
     const chain: JsonlSessionEntry[] = [];
@@ -254,7 +286,12 @@ export class JsonlSessionStore implements SessionStore {
   private async readAllInternal(path: string): Promise<ParsedSession> {
     await this.open(path);
     const raw = await readFile(path, "utf8");
-    return readJsonl(raw);
+    const parsed = readJsonl(raw);
+    if (parsed.header.version !== 3) {
+      await this.migrate(path);
+      return this.readAllInternal(path);
+    }
+    return parsed;
   }
 }
 

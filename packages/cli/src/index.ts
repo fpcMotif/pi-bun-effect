@@ -1,4 +1,9 @@
-import { createRpcProtocol, type RpcEvent, type RpcRequest, type RpcResponse } from "@pi-bun-effect/rpc";
+import {
+  createRpcProtocol,
+  type RpcEvent,
+  type RpcRequest,
+  type RpcResponse,
+} from "@pi-bun-effect/rpc";
 
 export interface CliCommand {
   name: string;
@@ -27,7 +32,12 @@ interface CliArgs {
 
 function parseArgs(argv: string[]): CliArgs {
   const args = [...argv];
-  const result: CliArgs = { mode: "interactive", help: false, version: false, invalidCommand: false };
+  const result: CliArgs = {
+    mode: "interactive",
+    help: false,
+    version: false,
+    invalidCommand: false,
+  };
 
   while (args.length > 0) {
     const arg = args.shift();
@@ -75,7 +85,11 @@ function formatEvent(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function makeTurnEvent(sessionId: string, turn: string, payload: string): RpcEvent {
+function makeTurnEvent(
+  sessionId: string,
+  turn: string,
+  payload: string,
+): RpcEvent {
   return {
     type: "agent_event",
     id: `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`,
@@ -83,12 +97,14 @@ function makeTurnEvent(sessionId: string, turn: string, payload: string): RpcEve
     payload: {
       sessionId,
       turn,
-      payload
-    }
+      payload,
+    },
   };
 }
 
-export async function runCli(argv: string[] = process.argv.slice(2)): Promise<number> {
+export async function runCli(
+  argv: string[] = process.argv.slice(2),
+): Promise<number> {
   const parsed = parseArgs(argv);
   const protocol = createRpcProtocol();
 
@@ -107,7 +123,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       type: "json_response",
       at: new Date().toISOString(),
       prompt: parsed.prompt ?? "",
-      stream: parsed.stream === true
+      stream: parsed.stream === true,
     };
     console.log(formatEvent(payload));
     return 0;
@@ -144,7 +160,7 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
     type: "json_response",
     at: new Date().toISOString(),
     mode: parsed.mode,
-    prompt: parsed.prompt ?? ""
+    prompt: parsed.prompt ?? "",
   };
   console.log(formatEvent(fallback));
   return 0;
@@ -154,23 +170,33 @@ async function handleRpcCommand(
   protocol: ReturnType<typeof createRpcProtocol>,
   request: RpcRequest,
   sessionId: string,
-  turn: number
+  turn: number,
 ): Promise<RpcResponse> {
   if (request.command === "prompt") {
-    const prompt = (request.payload as { message?: { content?: unknown[] } } | undefined)?.message;
+    const prompt = (
+      request.payload as { message?: { content?: unknown[] } } | undefined
+    )?.message;
     const payload = { sessionId, received: prompt ?? null, turn };
-    const event = makeTurnEvent(sessionId, `${turn}`, `${JSON.stringify(payload)}`);
+    const event = makeTurnEvent(
+      sessionId,
+      `${turn}`,
+      `${JSON.stringify(payload)}`,
+    );
     console.log(formatEvent(event));
 
     return {
       id: request.id,
       command: request.command,
       status: "ok",
-      result: payload
+      result: payload,
     };
   }
 
-  if (request.command === "steer" || request.command === "followUp" || request.command === "follow_up") {
+  if (
+    request.command === "steer"
+    || request.command === "followUp"
+    || request.command === "follow_up"
+  ) {
     return {
       id: request.id,
       command: request.command,
@@ -178,8 +204,8 @@ async function handleRpcCommand(
       result: {
         sessionId,
         command: request.command,
-        queued: true
-      }
+        queued: true,
+      },
     };
   }
 
@@ -191,8 +217,8 @@ async function handleRpcCommand(
       result: {
         sessionId,
         busy: false,
-        queued: 0
-      }
+        queued: 0,
+      },
     };
   }
 
@@ -203,8 +229,8 @@ async function handleRpcCommand(
       status: "ok",
       result: {
         sessionId,
-        messages: []
-      }
+        messages: [],
+      },
     };
   }
 
@@ -212,7 +238,7 @@ async function handleRpcCommand(
     id: request.id,
     command: request.command,
     status: "error",
-    error: `unsupported command: ${request.command}`
+    error: `unsupported command: ${request.command}`,
   };
 }
 
@@ -221,11 +247,11 @@ export function listCliCommands(): CliCommand[] {
     { name: "version", run: async () => runCli(["--version"]) },
     {
       name: "json",
-      run: async (args) => runCli(["--mode", "json", ...args])
+      run: async (args) => runCli(["--mode", "json", ...args]),
     },
     {
       name: "rpc",
-      run: async (args) => runCli(["--mode", "rpc", ...args])
-    }
+      run: async (args) => runCli(["--mode", "rpc", ...args]),
+    },
   ];
 }
