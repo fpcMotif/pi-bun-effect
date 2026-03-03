@@ -1,0 +1,165 @@
+{
+  "product": {
+    "name": "pi-bun-effect",
+    "tagline": "A Bun-first, Effect-TS agent platform compatible with pi sessions, extensible via packages, skills, templates, and a safer extension system.",
+    "problem_statement": "Current implementations split between a TypeScript/Node monorepo agent stack and a Rust single-binary port. We need a single Bun-native (runtime + ecosystem) implementation using Effect-TS to unify concurrency, error handling, and modular services while preserving pi-mono UX and session semantics.",
+    "primary_sources": [
+      "https://github.com/Dicklesworthstone/pi_agent_rust",
+      "https://github.com/badlogic/pi-mono",
+      "https://github.com/dmtrKovalenko/fff.nvim",
+      "https://deepwiki.com/badlogic/pi-mono",
+      "https://codewiki.google",
+      "https://bun.com/docs",
+      "https://effect.website/docs"
+    ]
+  },
+  "goals": [
+    "Preserve pi-mono behavioral contracts: JSONL v3 sessions with tree branching, compaction rules, RPC protocol, skills/templates/packages discovery, event streaming semantics.",
+    "Deliver Bun-first performance: fast startup, low memory footprint, responsive TUI, minimal overhead in tool calls and code search.",
+    "Adopt Effect-TS for structured concurrency, typed errors, resource scoping, and deterministic testing hooks.",
+    "Unify all surfaces: CLI/TUI, RPC, SDK, web UI integration, Slack bot, and vLLM pod manager under a shared core."
+  ],
+  "scope": {
+    "must_have": [
+      "Core types: message/content blocks, usage/cost, events schema (agent/message/tool).",
+      "Unified LLM adapter with streaming, partial tool-call JSON support, model registry, provider configuration, token + cost tracking (parity with pi-ai functionality).",
+      "Agent runtime: tool calling loop, message queueing (steer/followUp modes), abort/retry, compaction triggers, session persistence.",
+      "JSONL v3 session read/write and tree navigation; optional SQLite index cache for query/search.",
+      "CLI with modes: interactive TUI, print/JSON, RPC-over-stdio, SDK API.",
+      "Built-in tools for coding harness: read/write/edit/bash at minimum; grep/find/ls recommended for parity with existing stacks.",
+      "Extensions API: register tools/commands/shortcuts/flags, event interception, UI prompts; package manager for npm/git/path sources; hot reload where safe.",
+      "Skills + prompt templates + themes discovery and parsing; adherence/validation for Agent Skills standard.",
+      "vLLM pod manager: setup pods via SSH, start/stop models, OpenAI-compatible endpoints, tool-calling parser presets.",
+      "Code search UX: 'file reference' search in editor, fast fuzzy file finder, git-aware ranking, grep integration."
+    ],
+    "should_have": [
+      "Web UI components package for chat interfaces and attachments/artifacts workflows; Bun-hosted artifacts server.",
+      "Slack bot integration with per-channel storage; recommended sandbox mode.",
+      "Observability: structured logs, tracing spans, metrics hooks; redaction and audit trail for sensitive events."
+    ],
+    "nice_to_have": [
+      "Extension sandbox tiers (worker/process/WASM) selectable by policy.",
+      "Cross-repo search/memory integration (beyond scope of parity).",
+      "Built-in provider OAuth flows beyond those needed for initial parity."
+    ]
+  },
+  "non_goals": [
+    "Guaranteeing drop-in compatibility with every third-party extension without a compatibility layer (best-effort + conformance-driven).",
+    "Implementing a full IDE plugin suite (VS Code/JetBrains/etc.).",
+    "Building a 'plan mode' or multi-agent orchestration layer as a core feature (pi philosophy keeps core minimal)."
+  ],
+  "success_metrics": {
+    "behavioral_parity": {
+      "session_format": "100% read/write compatibility with JSONL v3 sessions (pi-mono docs as oracle).",
+      "rpc_protocol": ">= 95% command parity with pi-mono RPC doc; all P0 commands implemented.",
+      "tool_conformance": "Core tool outputs match fixture-based conformance suite across OS targets."
+    },
+    "performance": {
+      "startup_p95_ms": 150,
+      "resume_session_p95_ms_1m_entries": 75,
+      "fuzzy_file_search_p95_ms_50k_files": 15,
+      "tool_call_overhead_p95_ms_excluding_work": 5
+    },
+    "reliability": {
+      "crash_free_sessions_rate": ">= 99.5% over 7-day rolling window in dogfood telemetry (opt-in)",
+      "ci_flake_rate": "<= 1% across main pipeline"
+    },
+    "security": {
+      "default_policy": "Dangerous shell patterns blocked by default unless explicitly allowed.",
+      "auditability": "All tool/exec/http/session/ui hostcalls recorded with redaction and correlate to session + extension identity."
+    }
+  },
+  "constraints": [
+    "Primary runtime is Bun; Node compatibility is an open decision.",
+    "Must support JSONL v3 session semantics (branching, compaction entries) as specified in pi-mono docs.",
+    "Avoid Node-native addons when possible; Bun FFI is experimental and must be treated cautiously.",
+    "Slack bot library must be Bun-compatible or implemented via lower-level Slack APIs."
+  ],
+  "milestones": [
+    {
+      "name": "Foundation parity",
+      "exit_criteria": [
+        "Core types + event schema implemented",
+        "JSONL v3 session read/write + tree navigation",
+        "Agent loop + tool calls (read/write/edit/bash) with streaming",
+        "CLI print/interactive + minimal TUI",
+        "bun test CI green with coverage"
+      ],
+      "target_weeks": 4
+    },
+    {
+      "name": "Compatibility surfaces",
+      "exit_criteria": [
+        "RPC mode parity for P0 commands",
+        "Skills + prompt templates discovery",
+        "Compaction + branch summarization implemented",
+        "Package manager + extension hot reload (safe mode)"
+      ],
+      "target_weeks": 6
+    },
+    {
+      "name": "Ops & ecosystem",
+      "exit_criteria": [
+        "vLLM pods manager parity for setup/start/stop/list/logs",
+        "Observability hooks + audit logs",
+        "Code search subsystem v1 (fuzzy + grep + git-aware ranking)"
+      ],
+      "target_weeks": 8
+    },
+    {
+      "name": "Beta release",
+      "exit_criteria": [
+        "Installable binary packaging approach documented",
+        "Migration tooling for sessions/settings",
+        "Benchmarks published with reproducible harness",
+        "Security policy defaults reviewed"
+      ],
+      "target_weeks": 10
+    }
+  ],
+  "deliverables": [
+    "Monorepo with packages: core, llm, agent, session, tools, extensions, tui, rpc/sdk, pods, slack-bot, web-ui (optional).",
+    "spec.md and ADRs for key open decisions.",
+    "Conformance + regression test corpus (fixtures) for tools and RPC.",
+    "Benchmark harness + baseline results and profiling guide.",
+    "Migration guide mapping pi-mono and pi_agent_rust features to new modules."
+  ],
+  "rollout_plan": {
+    "phases": [
+      {
+        "phase": "Internal dogfood",
+        "audience": "maintainers + contributors",
+        "gates": [
+          "P0 parity",
+          "no known data-loss bugs in session persistence",
+          "basic policy enforcement on exec"
+        ]
+      },
+      {
+        "phase": "Public beta",
+        "audience": "early adopters",
+        "gates": [
+          "benchmarks published",
+          "upgrade path from pi-mono sessions validated",
+          "extension compatibility docs + safe defaults"
+        ]
+      },
+      {
+        "phase": "General availability",
+        "audience": "broad",
+        "gates": [
+          "CI stability",
+          "security review of default policies",
+          "backward compatible session migrations"
+        ]
+      }
+    ]
+  },
+  "open_decisions": [
+    "Bun-only vs Bun-first with Node fallback runtime support.",
+    "Provider set for GA (which OAuth providers vs API-key-only).",
+    "Extension sandbox model: in-process TS, Bun worker isolation, separate process, WASM tier.",
+    "Slack integration approach given known Bun runtime issues with some Bolt SDK usage.",
+    "Whether to reuse pi-mono subpackages as transitional adapters or reimplement fully with Effect services."
+  ]
+}

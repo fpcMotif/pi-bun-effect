@@ -1,0 +1,14 @@
+node_modules
+bun.lockb
+dist
+coverage
+.DS_Store
+.tmp
+.env
+.vscode
+.cache
+build
+.out
+artifacts
+*.sqlite
+*.log

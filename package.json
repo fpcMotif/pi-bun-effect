@@ -1,0 +1,27 @@
+{
+  "name": "pi-bun-effect",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "lint": "bunx @biomejs/biome check .",
+    "typecheck": "bunx tsc --noEmit",
+    "build:packages": "for pkg in core agent llm session index tools extensions search tui web-ui slack-bot pods rpc; do bun build packages/$pkg/src/index.ts --target=bun --outdir=dist/$pkg; done && bun build packages/cli/src/main.ts --target=bun --outdir=dist/cli",
+    "build": "bun run build:packages",
+    "artifacts:print": "bun -e \"import { readdirSync, existsSync } from 'node:fs'; console.log(JSON.stringify({dist: existsSync('dist') ? readdirSync('dist').sort() : []}, null, 2));\"",
+    "test:unit": "bun test ./tests/unit --coverage",
+    "test:conformance": "bun test ./tests/conformance --coverage",
+    "test:integration": "bun test ./tests/integration --coverage",
+    "test:e2e": "bun test ./tests/e2e --coverage",
+    "test:fuzz": "bun test ./tests/fuzz",
+    "test:bench": "bun test ./tests/bench",
+    "test": "bun run lint && bun run typecheck && bun run test:unit && bun run test:conformance && bun run test:integration && bun run test:e2e && bun run test:fuzz && bun run test:bench",
+    "ci:smoke": "bun run build && bun run test && bun run artifacts:print"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4"
+  }
+}

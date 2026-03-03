@@ -1,0 +1,11 @@
+{
+  "name": "@pi-bun-effect/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "test": "bun test",
+    "start": "bun run ./src/main.ts"
+  }
+}

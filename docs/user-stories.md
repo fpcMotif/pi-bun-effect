@@ -1,0 +1,21 @@
+# User Stories — pi-bun-effect
+
+## User stories and functional requirements
+
+This section defines user stories by persona. Priorities: P0 (must for parity / launch), P1 (should for initial public beta), P2 (later).
+
+### User stories table
+
+| Persona | User story | Acceptance criteria | Priority |
+|---|---|---|---|
+| Developer | As a developer, I can run an interactive coding agent in my terminal with a multi-line editor, slash commands, file reference autocomplete, and streaming tool output. | Interactive mode provides editor + streaming assistant output; users can invoke `/…` commands; typing `@` triggers fuzzy search for project files (pi behavior reference); tool calls render with incremental updates where applicable. | P0 |
+| Developer | As a developer, I can attach files/images to prompts and have them represented as typed content blocks in sessions and RPC. | Content blocks match session schema (text/image/thinking/toolCall) and are persisted in JSONL; RPC accepts image inputs as base64 with mimeType. | P0 |
+| Power user | As a power user, I can branch a session from any previous message and navigate a tree of conversation history without creating multiple files. | Sessions store a tree using `id`/`parentId` enabling in-place branching; interactive tree navigation is available (CLI/TUI command) and updates context accordingly. | P0 |
+| Power user | As a power user, I can keep long sessions usable via compaction and branch summarization with predictable cut-point rules. | Auto-compaction triggers by token thresholds; cut-point never splits a tool call from its tool result; split turns handled; compaction metadata is persisted. | P0 |
+| Operator | As an operator, I can enforce policy on tool execution and extension behavior (capabilities, dangerous commands blocked, logging/audit). | System supports capability-gated hostcalls; `exec` has mediation to block dangerous patterns by default; extension trust lifecycle (at minimum: installed/enabled/disabled/quarantined) is recorded with audit logs. | P0 |
+| Operator | As an operator, I can run the agent in a sandbox (Docker/process isolation) for high-risk workflows. | Provide a documented “sandbox mode” (at least: spawn tool runner inside container/process) and recommend isolation for broad-authority use cases like Slack bot operation. | P1 |
+| Contributor | As a contributor, I can add a new provider/model or a new tool with typed schemas, deterministic tests, and consistent event semantics. | Provider/tool interface is typed and validated; tests include unit + integration coverage; streaming events remain consistent across providers; conformance fixtures exist for core tools. | P0 |
+| CI/CD | As CI/CD, I can run a full test pipeline (unit/integration/e2e), get coverage, and publish artifacts (binaries, packages, docs) on release. | `bun test` executes in CI; coverage is produced via Bun’s coverage support; CI produces versioned artifacts and/or npm workspace packages. | P0 |
+| Operator | As an operator, I can deploy/manage vLLM pods as documented: setup, start/stop models, and expose OpenAI-compatible endpoints. | CLI supports similar commands (pods setup/start/stop/list/logs) and stores config; OpenAI-compatible base URL + API key usage is documented; tool calling parser configuration supported. | P0 |
+| Power user | As a power user, I can use RPC mode to embed the agent in IDEs or other UIs via JSON-over-stdio. | RPC implements command/event protocol (prompt/steer/follow_up/get_state/get_messages/set_model/etc.), including queued message semantics and correlation `id`. | P0 |
+| Operator | As an operator, I can run a Slack bot that maintains per-channel state and can execute tools on a controlled workspace. | Slack bot maintains separate histories per channel/DM; persists logs and attachments; recommended Docker sandbox supported; uses Slack Socket Mode style integration. | P1 (see Slack SDK risk) |

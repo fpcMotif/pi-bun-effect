@@ -1,0 +1,7 @@
+[test]
+# Keep test output stable and deterministic.
+
+[install]
+# Keep lockfile deterministic when dependency updates are later added.
+
+auto = "auto"
