@@ -1,9 +1,15 @@
+import {
+  computeFrecency,
+  createSearchService,
+  normalizeToken,
+  rankPath,
+  type SearchService,
+} from "@pi-bun-effect/search";
+import { expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
-import { computeFrecency, createSearchService, normalizeToken, rankPath, type SearchService } from "@pi-bun-effect/search";
 
 test("frecency decay is monotonic for positive aging", () => {
   const near = computeFrecency(1, 1, 0.95);
@@ -13,9 +19,27 @@ test("frecency decay is monotonic for positive aging", () => {
 });
 
 test("rank path is deterministic and stable", () => {
-  const scoreA = rankPath("src/components/agent.ts", "agent", { fuzzy: 2, frecency: 1, git: 1 }, 0.5, false);
-  const scoreB = rankPath("docs/agent.md", "agent", { fuzzy: 2, frecency: 1, git: 1 }, 0.5, false);
-  const scoreC = rankPath("README.md", "agent", { fuzzy: 2, frecency: 1, git: 1 }, 0.5, false);
+  const scoreA = rankPath(
+    "src/components/agent.ts",
+    "agent",
+    { fuzzy: 2, frecency: 1, git: 1 },
+    0.5,
+    false,
+  );
+  const scoreB = rankPath(
+    "docs/agent.md",
+    "agent",
+    { fuzzy: 2, frecency: 1, git: 1 },
+    0.5,
+    false,
+  );
+  const scoreC = rankPath(
+    "build/agent.md",
+    "agent",
+    { fuzzy: 2, frecency: 1, git: 1 },
+    0.5,
+    false,
+  );
 
   expect(scoreA).toBe(scoreB);
   expect(scoreA).toBe(scoreC);

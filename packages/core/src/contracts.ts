@@ -8,10 +8,19 @@ export interface ContentBlock {
 }
 
 export type MessageRole = "user" | "assistant" | "tool" | "system";
-export type MessageType = "user" | "assistant" | "toolResult" | "compactionSummary" | "branchSummary" | "custom";
+export type MessageType =
+  | "user"
+  | "assistant"
+  | "toolResult"
+  | "compactionSummary"
+  | "branchSummary"
+  | "custom";
 export type QueueBehavior = "steer" | "followUp";
 
-export interface BaseMessageEntry<TType extends MessageType, TRole extends MessageRole> {
+export interface BaseMessageEntry<
+  TType extends MessageType,
+  TRole extends MessageRole,
+> {
   type: TType;
   role: TRole;
   id: string;
@@ -24,35 +33,45 @@ export interface UserMessageEntry extends BaseMessageEntry<"user", "user"> {
   content: [ContentBlock, ...ContentBlock[]];
 }
 
-export interface AssistantMessageEntry extends BaseMessageEntry<"assistant", "assistant"> {
+export interface AssistantMessageEntry
+  extends BaseMessageEntry<"assistant", "assistant">
+{
   model?: string;
 }
 
-export interface ToolResultMessageEntry extends BaseMessageEntry<"toolResult", "tool"> {
+export interface ToolResultMessageEntry
+  extends BaseMessageEntry<"toolResult", "tool">
+{
   toolCallId: string;
   toolName?: string;
   isError?: boolean;
 }
 
-export interface CompactionSummaryMessageEntry extends BaseMessageEntry<"compactionSummary", "system"> {
+export interface CompactionSummaryMessageEntry
+  extends BaseMessageEntry<"compactionSummary", "system">
+{
   content: [
     {
       type: "text";
       text: string;
-    }
+    },
   ];
 }
 
-export interface BranchSummaryMessageEntry extends BaseMessageEntry<"branchSummary", "system"> {
+export interface BranchSummaryMessageEntry
+  extends BaseMessageEntry<"branchSummary", "system">
+{
   content: [
     {
       type: "text";
       text: string;
-    }
+    },
   ];
 }
 
-export interface CustomMessageEntry extends BaseMessageEntry<"custom", MessageRole> {
+export interface CustomMessageEntry
+  extends BaseMessageEntry<"custom", MessageRole>
+{
   kind: string;
 }
 
@@ -115,7 +134,13 @@ export interface DoneEvent extends BaseAgentEvent {
   stopReason: "stop" | "tool" | "max_tokens";
 }
 
-export type AgentEvent = BaseAgentEvent | TextEvent | ThinkingEvent | ToolCallEvent | ErrorEvent | DoneEvent;
+export type AgentEvent =
+  | BaseAgentEvent
+  | TextEvent
+  | ThinkingEvent
+  | ToolCallEvent
+  | ErrorEvent
+  | DoneEvent;
 
 export interface RequestBase {
   id?: string;
@@ -147,13 +172,17 @@ export interface SessionEntry {
 }
 
 export function isAgentMessage(value: unknown): value is AgentMessage {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
   return (
-    !!value &&
-    typeof value === "object" &&
-    "id" in value &&
-    "role" in value &&
-    typeof (value as { id: unknown }).id === "string" &&
-    typeof (value as { role: unknown }).role === "string" &&
-    typeof (value as { type: unknown }).type === "string"
+    "id" in candidate
+    && "role" in candidate
+    && "type" in candidate
+    && typeof candidate.id === "string"
+    && typeof candidate.role === "string"
+    && typeof candidate.type === "string"
   );
 }

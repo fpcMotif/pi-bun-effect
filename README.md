@@ -18,6 +18,7 @@ Bun-first Effect-TS rewrite of `pi-mono` and `pi_agent_rust` with JSONL v3 sessi
 5. `bun test` (placeholder test pipeline)
 
 Run from root:
+
 - `bun install`
 - `bun run lint`
 - `bun test`

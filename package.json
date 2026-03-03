@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "packages/*"
-  ],
+  "workspaces": ["packages/*"],
   "scripts": {
-    "lint": "bunx @biomejs/biome check .",
+    "lint": "bun run lint:ox && bun run fmt:check",
+    "lint:ox": "bunx oxlint package.json tsconfig.json packages tests --tsconfig tsconfig.json --max-warnings=0",
+    "fmt:check": "bunx dprint check",
+    "fmt": "bunx dprint fmt",
     "typecheck": "bunx tsc --noEmit",
     "build:packages": "for pkg in core agent llm session index tools extensions search tui web-ui slack-bot pods rpc; do bun build packages/$pkg/src/index.ts --target=bun --outdir=dist/$pkg; done && bun build packages/cli/src/main.ts --target=bun --outdir=dist/cli",
     "build": "bun run build:packages",
@@ -22,6 +23,7 @@
     "ci:smoke": "bun run build && bun run test && bun run artifacts:print"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4"
+    "dprint": "^0.52.0",
+    "oxlint": "^1.51.0"
   }
 }

@@ -1,10 +1,14 @@
-import { test, expect } from "bun:test";
-import { createPolicyEngine, type Capability } from "@pi-bun-effect/extensions";
+import { type Capability, createPolicyEngine } from "@pi-bun-effect/extensions";
+import { expect, test } from "bun:test";
 
 test("policy denies dangerous commands by default", async () => {
   const engine = createPolicyEngine();
 
-  const denied = await engine.check("ext-unknown", "exec:spawn", "rm -rf /tmp/test");
+  const denied = await engine.check(
+    "ext-unknown",
+    "exec:spawn",
+    "rm -rf /tmp/test",
+  );
   expect(denied.allowed).toBeFalse();
   expect(denied.reason).toContain("default safety");
 });
@@ -39,8 +43,8 @@ test("policy capability allowlist blocks non-allowed command", async () => {
       capabilities: ["exec:spawn" as Capability],
       allowCommands: ["echo hello"],
       denyCommands: [],
-      denyPatterns: []
-    }
+      denyPatterns: [],
+    },
   ]);
   const result = await policy.check("ext-allow", "exec:spawn", "ls");
   expect(result.allowed).toBeFalse();

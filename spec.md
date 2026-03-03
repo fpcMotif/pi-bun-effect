@@ -5,12 +5,14 @@
 pi-bun-effect is a Bun-first agent platform written in TypeScript using Effect-TS. It preserves pi-mono behavioral contracts (sessions, compaction, RPC, extensions/packages/skills/prompt templates) while adopting a stronger "capability + mediation" execution model inspired by pi_agent_rust.
 
 Primary execution modes:
+
 - Interactive TUI
 - Print/JSON
 - RPC over stdio
 - SDK embedding
 
 Key storage:
+
 - JSONL v3 sessions (source of truth)
 - Optional SQLite index cache (derived) via bun:sqlite
 
@@ -91,6 +93,7 @@ sequenceDiagram
 ## Module breakdown
 
 Proposed monorepo packages (names illustrative):
+
 - packages/core: domain types (messages/events/errors), Effect layers, shared utils
 - packages/llm: provider adapters, model registry, streaming + partial tool-call JSON assembly
 - packages/agent: Agent runtime (queues, compaction triggers, retry, cancellation)
@@ -110,15 +113,18 @@ Proposed monorepo packages (names illustrative):
 ### Session JSONL v3 (source of truth)
 
 Session entries are append-only JSON objects:
+
 - first line: session header (version=3)
 - subsequent lines: entries with {type, id, parentId, timestamp, ...}
 
 Messages are AgentMessage union:
+
 - user / assistant / toolResult (+ extended roles like compactionSummary, branchSummary, custom)
 
 ### LLM events
 
 Streaming returns an async stream of:
+
 - start
 - text_start/text_delta/text_end
 - thinking_start/thinking_delta/thinking_end (provider dependent)
@@ -131,6 +137,7 @@ Streaming returns an async stream of:
 ### CLI
 
 Commands (sketch):
+
 - pi [interactive default]
 - pi -p "prompt" (print mode)
 - pi --mode json (emit JSONL events)
@@ -143,6 +150,7 @@ Commands (sketch):
 ### RPC (stdio JSONL)
 
 Implements pi-mono RPC command set:
+
 - prompt/steer/follow_up/abort
 - get_state/get_messages
 - set_model/cycle_model/get_available_models
@@ -161,6 +169,7 @@ Interface (Effect style):
 - complete(model, context, options): Effect<..., LlmError, AssistantMessage>
 
 Responsibilities:
+
 - Provider configuration (baseUrl, apiKey, OAuth tokens)
 - Automatic model discovery + catalog
 - Token + cost tracking in usage
@@ -225,6 +234,7 @@ Responsibilities:
 ## Security model
 
 Default posture:
+
 - Capabilities are explicit per extension/tool route:
   - tool: read/write/edit/bash/grep/find/ls
   - exec: spawn processes (mediated)
@@ -233,13 +243,14 @@ Default posture:
   - ui: prompts/overlays
   - events: scheduling/cron-like
 - Two-stage exec guard:
-  1) capability check: can this caller run exec at all
-  2) command mediation: classify command patterns (rm -rf, disk writes, reverse shell patterns) and block by default
+  1. capability check: can this caller run exec at all
+  2. command mediation: classify command patterns (rm -rf, disk writes, reverse shell patterns) and block by default
 - Trust lifecycle for extensions:
   - pending -> acknowledged -> trusted -> quarantined/killed
   - changes recorded with operator provenance
 
 Sandboxing options (open decision):
+
 - in-process (fast, least isolation)
 - Bun worker isolation (medium)
 - process isolation (stronger)
@@ -271,12 +282,14 @@ Sandboxing options (open decision):
 ## Code-search improvements inspired by fff.nvim
 
 Implement a dedicated “SearchService” that supports:
+
 - persistent file index with access frequency (“frecency") and git status
 - typo-resistant fuzzy matching with fast lookup
 - cross-mode suggestions: if file search fails, suggest content hits (grep) and vice versa
 - multiline paste normalization for pasting paths/snippets
 
 UX:
+
 - Editor @file picker uses SearchService with sub-15ms p95 target
 - /grep provides modes: plain/regex/fuzzy (fuzzy optional)
 - result previews include:
@@ -287,15 +300,16 @@ UX:
 ## Third-party libraries and Bun-native alternatives
 
 Selection principles:
+
 - Prefer Bun built-ins (Bun.serve, bun:sqlite, bun test) where stable
 - Prefer Effect platform abstractions where they do not force Node polyfills
 - Avoid native addons unless strictly necessary
 
 Candidates (shortlist):
+
 - CLI: @effect/cli
 - Schema: @effect/schema or zod (decision)
 - HTTP Server: Bun.serve (native)
 - SQLite: bun:sqlite (native) with lightweight query layer
 - SSH: spawn ssh (Bun.spawn) vs pure TS ssh client (decision)
 - Slack: avoid Bolt if Bun issues persist; use Slack Web API + Socket Mode over websockets (decision)
-

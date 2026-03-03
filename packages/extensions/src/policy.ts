@@ -13,7 +13,12 @@ export type Capability =
   | "ui:prompt"
   | "events:schedule";
 
-export type TrustDecision = "pending" | "acknowledged" | "trusted" | "quarantined" | "killed";
+export type TrustDecision =
+  | "pending"
+  | "acknowledged"
+  | "trusted"
+  | "quarantined"
+  | "killed";
 
 export interface ExtensionPolicy {
   extensionId: string;
@@ -39,9 +44,18 @@ export interface CommandMediationResult {
 
 export interface PolicyEngine {
   evaluateCapability(extensionId: string, capability: Capability): boolean;
-  check(extensionId: string, capability: Capability, command: string): Promise<CommandMediationResult>;
+  check(
+    extensionId: string,
+    capability: Capability,
+    command: string,
+  ): Promise<CommandMediationResult>;
   getTrust(extensionId: string): Promise<TrustRecord>;
-  setTrust(extensionId: string, decision: TrustDecision, actor: string, note?: string): Promise<void>;
+  setTrust(
+    extensionId: string,
+    decision: TrustDecision,
+    actor: string,
+    note?: string,
+  ): Promise<void>;
 }
 
 function nowIso(): string {
@@ -50,10 +64,16 @@ function nowIso(): string {
 
 const defaultPolicy: ExtensionPolicy = {
   extensionId: "default",
-  capabilities: ["session:read", "session:write", "tool:read", "tool:write", "tool:edit"],
+  capabilities: [
+    "session:read",
+    "session:write",
+    "tool:read",
+    "tool:write",
+    "tool:edit",
+  ],
   allowCommands: [],
   denyCommands: ["reboot", "shutdown"],
-  denyPatterns: ["rm -rf", "mkfs", "dd if=", "curl .*\|", "/bin/sh -c", "nc -l"]
+  denyPatterns: ["rm -rf", "mkfs", "dd if=", "curl .*|", "/bin/sh -c", "nc -l"],
 };
 
 function compilePatterns(patterns: string[]): RegExp[] {
@@ -63,7 +83,7 @@ function compilePatterns(patterns: string[]): RegExp[] {
 export function createDefaultPolicy(): ExtensionPolicy {
   return {
     ...defaultPolicy,
-    extensionId: `ext-${Date.now()}`
+    extensionId: `ext-${Date.now()}`,
   };
 }
 
@@ -80,7 +100,7 @@ export class DefaultPolicyEngine implements PolicyEngine {
         extensionId: policy.extensionId,
         decision: "acknowledged",
         changedBy: "init",
-        changedAt: nowIso()
+        changedAt: nowIso(),
       });
     }
   }
@@ -88,28 +108,50 @@ export class DefaultPolicyEngine implements PolicyEngine {
   evaluateCapability(extensionId: string, capability: Capability): boolean {
     const policy = this.policies.get(extensionId) ?? defaultPolicy;
     const trust = this.trust.get(extensionId);
-    if (trust && (trust.decision === "killed" || trust.decision === "quarantined")) {
+    if (
+      trust
+      && (trust.decision === "killed" || trust.decision === "quarantined")
+    ) {
       return false;
     }
     return policy.capabilities.includes(capability);
   }
 
-  async check(extensionId: string, capability: Capability, command: string): Promise<CommandMediationResult> {
+  async check(
+    extensionId: string,
+    capability: Capability,
+    command: string,
+  ): Promise<CommandMediationResult> {
+    const policy = this.policies.get(extensionId) ?? defaultPolicy;
+    const lowered = command.trim();
+
+    const matchedPattern = this.denyPatternRegs.find((pattern) =>
+      pattern.test(lowered)
+    );
+    if (matchedPattern) {
+      return {
+        allowed: false,
+        reason: `Blocked by default safety pattern: ${matchedPattern.source}`,
+        suggestedFix:
+          "Pass an explicit allow policy and safer command variant.",
+      };
+    }
+
     if (!this.evaluateCapability(extensionId, capability)) {
       return {
         allowed: false,
         reason: `Capability denied: ${capability}`,
-        suggestedFix: "Grant capability in extension manifest and trust profile."
+        suggestedFix:
+          "Grant capability in extension manifest and trust profile.",
       };
     }
 
-    const policy = this.policies.get(extensionId) ?? defaultPolicy;
-    const lowered = command.trim();
-    if (policy.denyCommands.includes(lowered.split(" ")[0])) {
+    const commandName = lowered.split(" ")[0] ?? "";
+    if (policy.denyCommands.includes(commandName)) {
       return {
         allowed: false,
         reason: "Command denied by denylist",
-        suggestedFix: "Use allowlist policy to explicitly allow this command."
+        suggestedFix: "Use allowlist policy to explicitly allow this command.",
       };
     }
 
@@ -117,53 +159,58 @@ export class DefaultPolicyEngine implements PolicyEngine {
       return {
         allowed: false,
         reason: "Command denied by denylist",
-        suggestedFix: "Use allowlist policy to explicitly allow this command."
+        suggestedFix: "Use allowlist policy to explicitly allow this command.",
       };
     }
 
-    const matchedPattern = this.denyPatternRegs.find((pattern) => pattern.test(lowered));
-    if (matchedPattern) {
-      return {
-        allowed: false,
-        reason: `Blocked by default safety pattern: ${matchedPattern.source}`,
-        suggestedFix: "Pass an explicit allow policy and safer command variant."
-      };
-    }
-
-    if (policy.allowCommands.length > 0 && !policy.allowCommands.some((value) => lowered === value)) {
+    if (
+      policy.allowCommands.length > 0
+      && !policy.allowCommands.some((value) => lowered === value)
+    ) {
       return {
         allowed: false,
         reason: "Command not in allowlist",
-        suggestedFix: `Allowed commands are: ${policy.allowCommands.join(", ")}`
+        suggestedFix: `Allowed commands are: ${
+          policy.allowCommands.join(", ")
+        }`,
       };
     }
 
     return {
-      allowed: true
+      allowed: true,
     };
   }
 
   async getTrust(extensionId: string): Promise<TrustRecord> {
-    return this.trust.get(extensionId) ?? {
-      extensionId,
-      decision: "pending",
-      changedBy: "system",
-      changedAt: nowIso(),
-      note: "created by default"
-    };
+    return (
+      this.trust.get(extensionId) ?? {
+        extensionId,
+        decision: "pending",
+        changedBy: "system",
+        changedAt: nowIso(),
+        note: "created by default",
+      }
+    );
   }
 
-  async setTrust(extensionId: string, decision: TrustDecision, actor: string, note?: string): Promise<void> {
+  async setTrust(
+    extensionId: string,
+    decision: TrustDecision,
+    actor: string,
+    note?: string,
+  ): Promise<void> {
     this.trust.set(extensionId, {
       extensionId,
       decision,
       changedBy: actor,
       changedAt: nowIso(),
-      note
+      note,
     });
   }
 }
 
-export function createPolicyEngine(initialPolicies: ExtensionPolicy[] = []): PolicyEngine {
+export function createPolicyEngine(
+  initialPolicies: ExtensionPolicy[] = [],
+): PolicyEngine {
   return new DefaultPolicyEngine(initialPolicies);
 }

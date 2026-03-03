@@ -29,11 +29,11 @@ export class InMemoryArtifactServer implements ArtifactServer {
       hostname: config.host,
       fetch() {
         return Response.json({ ok: true, artifacts: [] });
-      }
+      },
     });
 
     this.server = {
-      close: () => server.stop()
+      close: () => server.stop(),
     };
   }
 

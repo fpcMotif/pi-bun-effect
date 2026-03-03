@@ -1,0 +1,19 @@
+{
+  "excludes": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "bun.lockb"
+  ],
+  "plugins": [
+    "https://plugins.dprint.dev/typescript-0.95.0.wasm",
+    "https://plugins.dprint.dev/json-0.21.0.wasm",
+    "https://plugins.dprint.dev/markdown-0.20.0.wasm"
+  ],
+  "json": {},
+  "markdown": {},
+  "typescript": {
+    "lineWidth": 80,
+    "indentWidth": 2
+  }
+}

@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 
 interface TurnNode {
   role: "assistant" | "tool";
@@ -14,11 +14,19 @@ function compactionCutPoint(nodes: TurnNode[], budget: number): number {
   const prior = nodes[cut - 1];
   const next = nodes[cut];
 
-  if (prior?.role === "assistant" && prior.type === "assistant" && next?.type === "toolResult") {
+  if (
+    prior?.role === "assistant"
+    && prior.type === "assistant"
+    && next?.type === "toolResult"
+  ) {
     return cut;
   }
 
-  if (prior?.type === "toolResult" && prior.role === "tool" && prior.type === "toolResult") {
+  if (
+    prior?.type === "toolResult"
+    && prior.role === "tool"
+    && prior.type === "toolResult"
+  ) {
     return cut;
   }
 
@@ -31,7 +39,7 @@ test("compaction cut does not separate assistant tool-call and tool-result", () 
     { role: "assistant", type: "assistant" },
     { role: "assistant", type: "assistant" },
     { role: "tool", type: "toolResult" },
-    { role: "assistant", type: "assistant" }
+    { role: "assistant", type: "assistant" },
   ];
 
   const cut = compactionCutPoint(nodes, 3);
@@ -44,7 +52,7 @@ test("compaction keeps tool pair when budget lands inside pair", () => {
     { role: "tool", type: "toolResult" },
     { role: "assistant", type: "assistant" },
     { role: "assistant", type: "assistant" },
-    { role: "assistant", type: "assistant" }
+    { role: "assistant", type: "assistant" },
   ];
 
   const cut = compactionCutPoint(nodes, 2);

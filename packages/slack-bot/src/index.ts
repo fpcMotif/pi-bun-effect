@@ -36,7 +36,7 @@ export class InMemorySlackBot implements SlackBot {
   routeEvent(event: SlackEvent): ChannelState {
     const existing = this.channels.get(event.channel) ?? {
       channelId: event.channel,
-      messageCount: 0
+      messageCount: 0,
     };
     existing.messageCount += 1;
     existing.lastPrompt = event.text;
