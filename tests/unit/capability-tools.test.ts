@@ -1,0 +1,128 @@
+import type { Capability, TrustDecision } from "@pi-bun-effect/extensions";
+import {
+  createToolRegistry,
+  registerBuiltinTools,
+  type ToolContext,
+} from "@pi-bun-effect/tools";
+import { expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+function makeContext(
+  capabilities: Capability[],
+  trust: TrustDecision = "trusted",
+): ToolContext {
+  return {
+    sessionId: "cap-test",
+    extensionId: "ext-cap",
+    capabilities: new Set(capabilities),
+    trust,
+  };
+}
+
+test("capability enforcement denies tool execution without matching capability", async () => {
+  const registry = createToolRegistry();
+  registerBuiltinTools(registry);
+
+  const restricted = makeContext(["tool:read"]);
+  await expect(
+    registry.execute(restricted, {
+      name: "bash",
+      input: { command: "echo hi" },
+    }),
+  ).rejects.toThrow("capability denied: tool:bash");
+
+  const granted = makeContext(["tool:bash"]);
+  const result = await registry.execute(granted, {
+    name: "bash",
+    input: { command: "printf 'cap-ok'" },
+  });
+  expect(result.content.content.at(0)?.text).toContain("cap-ok");
+});
+
+test("capability enforcement allows all tools with full capability set", async () => {
+  const registry = createToolRegistry();
+  registerBuiltinTools(registry);
+
+  const full = makeContext([
+    "tool:read",
+    "tool:write",
+    "tool:edit",
+    "tool:bash",
+    "tool:grep",
+    "tool:find",
+    "tool:ls",
+  ]);
+
+  const tools = registry.list();
+  expect(tools.length).toBe(7);
+
+  for (const tool of tools) {
+    if (tool.name === "read" || tool.name === "write" || tool.name === "edit") {
+      continue;
+    }
+    const result = await registry.execute(full, {
+      name: tool.name,
+      input: tool.name === "bash"
+        ? { command: "echo ok" }
+        : { path: ".", pattern: "test" },
+    });
+    expect(result.content.type).toBe("toolResult");
+  }
+});
+
+test("grep tool searches file contents", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-bun-effect-grep-"));
+  writeFileSync(
+    join(root, "haystack.txt"),
+    "needle in a haystack\nno match here",
+  );
+
+  const registry = createToolRegistry();
+  registerBuiltinTools(registry);
+  const ctx = makeContext(["tool:grep"]);
+
+  const result = await registry.execute(ctx, {
+    name: "grep",
+    input: { pattern: "needle", path: root },
+  });
+  expect(result.content.content.at(0)?.text).toContain("needle");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("find tool finds files by pattern", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-bun-effect-find-"));
+  writeFileSync(join(root, "target.md"), "found");
+  writeFileSync(join(root, "ignore.txt"), "skip");
+
+  const registry = createToolRegistry();
+  registerBuiltinTools(registry);
+  const ctx = makeContext(["tool:find"]);
+
+  const result = await registry.execute(ctx, {
+    name: "find",
+    input: { pattern: "*.md", path: root },
+  });
+  expect(result.content.content.at(0)?.text).toContain("target.md");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("ls tool lists directory contents", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-bun-effect-ls-"));
+  writeFileSync(join(root, "file-a.txt"), "a");
+  writeFileSync(join(root, "file-b.txt"), "b");
+
+  const registry = createToolRegistry();
+  registerBuiltinTools(registry);
+  const ctx = makeContext(["tool:ls"]);
+
+  const result = await registry.execute(ctx, {
+    name: "ls",
+    input: { path: root },
+  });
+  const text = result.content.content.at(0)?.text ?? "";
+  expect(text).toContain("file-a.txt");
+  expect(text).toContain("file-b.txt");
+  rmSync(root, { recursive: true, force: true });
+});

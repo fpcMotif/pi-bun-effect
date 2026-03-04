@@ -1,6 +1,4 @@
-import {
-  createRpcProtocol,
-} from "@pi-bun-effect/rpc";
+import { createRpcProtocol } from "@pi-bun-effect/rpc";
 import { createRpcExecutionService } from "./rpc-service";
 
 export interface CliCommand {

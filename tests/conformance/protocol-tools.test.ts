@@ -1,4 +1,3 @@
-import { createRpcExecutionService } from "../../packages/cli/src/index";
 import type { AgentMessage } from "@pi-bun-effect/core";
 import type { Capability, TrustDecision } from "@pi-bun-effect/extensions";
 import type { RpcPayloads, RpcRequest } from "@pi-bun-effect/rpc";
@@ -10,6 +9,7 @@ import { mkdtempSync } from "node:fs";
 import { rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createRpcExecutionService } from "../../packages/cli/src/index";
 
 function userMessage(text: string): AgentMessage {
   return {
@@ -52,7 +52,9 @@ test("conformance: rpc protocol rejects malformed and unknown commands", () => {
 });
 
 test("conformance: rpc p0 commands are implemented with correlated response envelopes", async () => {
-  const sessionsRoot = mkdtempSync(join(tmpdir(), "pi-bun-effect-rpc-conformance-"));
+  const sessionsRoot = mkdtempSync(
+    join(tmpdir(), "pi-bun-effect-rpc-conformance-"),
+  );
   const service = await createRpcExecutionService({ rootDir: sessionsRoot });
 
   const promptResponse = await service.handle({
@@ -73,33 +75,60 @@ test("conformance: rpc p0 commands are implemented with correlated response enve
   expect(availableModels.id).toBe("p0-get-models");
   expect(availableModels.command).toBe("get_available_models");
   expect(availableModels.status).toBe("ok");
-  expect((availableModels.result as { models: unknown[] }).models.length).toBeGreaterThan(0);
+  expect((availableModels.result as { models: unknown[] }).models.length)
+    .toBeGreaterThan(0);
 
   const setModel = await service.handle({
     id: "p0-set-model",
     command: "set_model",
     payload: { provider: "openai", modelId: "gpt-4o" },
   });
-  expect(setModel).toMatchObject({ id: "p0-set-model", command: "set_model", status: "ok" });
+  expect(setModel).toMatchObject({
+    id: "p0-set-model",
+    command: "set_model",
+    status: "ok",
+  });
 
   const cycleModel = await service.handle({
     id: "p0-cycle-model",
     command: "cycle_model",
   });
-  expect(cycleModel).toMatchObject({ id: "p0-cycle-model", command: "cycle_model", status: "ok" });
+  expect(cycleModel).toMatchObject({
+    id: "p0-cycle-model",
+    command: "cycle_model",
+    status: "ok",
+  });
 
-  const compact = await service.handle({ id: "p0-compact", command: "compact" });
-  expect(compact).toMatchObject({ id: "p0-compact", command: "compact", status: "ok" });
+  const compact = await service.handle({
+    id: "p0-compact",
+    command: "compact",
+  });
+  expect(compact).toMatchObject({
+    id: "p0-compact",
+    command: "compact",
+    status: "ok",
+  });
 
   const setAutoRetry = await service.handle({
     id: "p0-set-auto-retry",
     command: "set_auto_retry",
     payload: { enabled: true },
   });
-  expect(setAutoRetry).toMatchObject({ id: "p0-set-auto-retry", command: "set_auto_retry", status: "ok" });
+  expect(setAutoRetry).toMatchObject({
+    id: "p0-set-auto-retry",
+    command: "set_auto_retry",
+    status: "ok",
+  });
 
-  const abortRetry = await service.handle({ id: "p0-abort-retry", command: "abort_retry" });
-  expect(abortRetry).toMatchObject({ id: "p0-abort-retry", command: "abort_retry", status: "ok" });
+  const abortRetry = await service.handle({
+    id: "p0-abort-retry",
+    command: "abort_retry",
+  });
+  expect(abortRetry).toMatchObject({
+    id: "p0-abort-retry",
+    command: "abort_retry",
+    status: "ok",
+  });
 
   const bash = await service.handle({
     id: "p0-bash",
@@ -108,16 +137,28 @@ test("conformance: rpc p0 commands are implemented with correlated response enve
   });
   expect(bash).toMatchObject({ id: "p0-bash", command: "bash", status: "ok" });
 
-  const newSession = await service.handle({ id: "p0-new-session", command: "new_session" });
-  expect(newSession).toMatchObject({ id: "p0-new-session", command: "new_session", status: "ok" });
-  const switchedSessionId = (newSession.result as { sessionId: string }).sessionId;
+  const newSession = await service.handle({
+    id: "p0-new-session",
+    command: "new_session",
+  });
+  expect(newSession).toMatchObject({
+    id: "p0-new-session",
+    command: "new_session",
+    status: "ok",
+  });
+  const switchedSessionId =
+    (newSession.result as { sessionId: string }).sessionId;
 
   const switched = await service.handle({
     id: "p0-switch",
     command: "switch",
     payload: { sessionId: switchedSessionId },
   });
-  expect(switched).toMatchObject({ id: "p0-switch", command: "switch", status: "ok" });
+  expect(switched).toMatchObject({
+    id: "p0-switch",
+    command: "switch",
+    status: "ok",
+  });
 
   const prompt2 = await service.handle({
     id: "p0-prompt-2",
@@ -126,9 +167,13 @@ test("conformance: rpc p0 commands are implemented with correlated response enve
   });
   expect(prompt2.status).toBe("ok");
 
-  const messages = await service.handle({ id: "p0-get-messages", command: "get_messages" });
+  const messages = await service.handle({
+    id: "p0-get-messages",
+    command: "get_messages",
+  });
   expect(messages.status).toBe("ok");
-  const messageList = (messages.result as { messages: AgentMessage[] }).messages;
+  const messageList =
+    (messages.result as { messages: AgentMessage[] }).messages;
   const forkSource = messageList.at(-1)?.id;
   expect(forkSource).toBeDefined();
 
@@ -147,7 +192,11 @@ test("conformance: rpc p0 commands are implemented with correlated response enve
       entryId: (fork.result as { forkedEntryId: string }).forkedEntryId,
     },
   });
-  expect(tree).toMatchObject({ id: "p0-tree", command: "tree_navigation", status: "ok" });
+  expect(tree).toMatchObject({
+    id: "p0-tree",
+    command: "tree_navigation",
+    status: "ok",
+  });
 
   rmSync(sessionsRoot, { recursive: true, force: true });
 });

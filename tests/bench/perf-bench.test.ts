@@ -14,7 +14,7 @@ test("bench: startup path and registry hydration cost", () => {
   const loaded = registry.list();
   const cost = performance.now() - start;
 
-  expect(loaded.length).toBe(4);
+  expect(loaded.length).toBe(7);
   expect(cost).toBeGreaterThan(0);
   console.log(`[bench] tool-registry-init-ms=${cost.toFixed(2)}`);
 });

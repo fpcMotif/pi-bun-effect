@@ -130,7 +130,7 @@ export class InMemoryAgentSession implements AgentSession {
   async getState(): Promise<AgentState> {
     return {
       ...this.state,
-      queueDepth: { ...this.state.queueDepth },
+      queueDepth: { ...this.queueDepth },
     };
   }
 

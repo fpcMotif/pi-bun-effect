@@ -1,10 +1,18 @@
-import { createAgentSession, type AgentSession } from "@pi-bun-effect/agent";
+import { type AgentSession, createAgentSession } from "@pi-bun-effect/agent";
 import type { AgentMessage, QueueBehavior } from "@pi-bun-effect/core";
 import { createDefaultLlmProvider, type LlmModelId } from "@pi-bun-effect/llm";
-import type { RpcCommandName, RpcRequest, RpcResponse } from "@pi-bun-effect/rpc";
+import type {
+  RpcCommandName,
+  RpcRequest,
+  RpcResponse,
+} from "@pi-bun-effect/rpc";
 import { createSessionStore, type SessionStore } from "@pi-bun-effect/session";
-import { createToolRegistry, registerBuiltinTools, type ToolRegistry } from "@pi-bun-effect/tools";
-import { mkdirSync } from "node:fs";
+import {
+  createToolRegistry,
+  registerBuiltinTools,
+  type ToolRegistry,
+} from "@pi-bun-effect/tools";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 interface RuntimeSession {
@@ -23,7 +31,9 @@ function makeId(prefix: string): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return `${prefix}-${crypto.randomUUID()}`;
   }
-  return `${prefix}-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+  return `${prefix}-${Date.now().toString(16)}-${
+    Math.random().toString(16).slice(2)
+  }`;
 }
 
 function ok<T>(request: RpcRequest, result: T): RpcResponse<T> {
@@ -45,7 +55,9 @@ function errorResponse(request: RpcRequest, message: string): RpcResponse {
 }
 
 function asObject(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
+  return typeof value === "object" && value !== null
+    ? value as Record<string, unknown>
+    : {};
 }
 
 function asAgentMessage(payload: unknown): AgentMessage | null {
@@ -85,10 +97,10 @@ export class RpcExecutionService {
     this.sessionStore = options.sessionStore ?? createSessionStore();
     this.toolRegistry = options.toolRegistry ?? createToolRegistry();
     registerBuiltinTools(this.toolRegistry);
-    mkdirSync(this.rootDir, { recursive: true });
   }
 
   async initialize(): Promise<void> {
+    await mkdir(this.rootDir, { recursive: true });
     const starter = await this.createSession(makeId("session"));
     this.activeSessionId = starter.id;
     const models = await this.provider.modelRegistry();
@@ -107,17 +119,25 @@ export class RpcExecutionService {
       }
       if (command === "abort") return await this.handleAbort(request);
       if (command === "get_state") return await this.handleGetState(request);
-      if (command === "get_messages") return await this.handleGetMessages(request);
+      if (command === "get_messages") {
+        return await this.handleGetMessages(request);
+      }
       if (command === "set_model") return await this.handleSetModel(request);
       if (command === "cycle_model") return this.handleCycleModel(request);
-      if (command === "get_available_models") return this.handleAvailableModels(request);
+      if (command === "get_available_models") {
+        return this.handleAvailableModels(request);
+      }
       if (command === "compact") return await this.handleCompact(request);
       if (command === "set_auto_retry") return this.handleSetAutoRetry(request);
       if (command === "abort_retry") return this.handleAbortRetry(request);
-      if (command === "new_session") return await this.handleNewSession(request);
+      if (command === "new_session") {
+        return await this.handleNewSession(request);
+      }
       if (command === "switch") return await this.handleSwitch(request);
       if (command === "fork") return await this.handleFork(request);
-      if (command === "tree_navigation") return await this.handleTreeNavigation(request);
+      if (command === "tree_navigation") {
+        return await this.handleTreeNavigation(request);
+      }
       if (command === "bash") return await this.handleBash(request);
       if (
         command === "set_thinking_level"
@@ -130,18 +150,28 @@ export class RpcExecutionService {
       }
       return errorResponse(request, `unsupported command: ${request.command}`);
     } catch (error) {
-      return errorResponse(request, error instanceof Error ? error.message : String(error));
+      return errorResponse(
+        request,
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 
-  private async handleTurn(request: RpcRequest, mode: "prompt" | QueueBehavior): Promise<RpcResponse> {
+  private async handleTurn(
+    request: RpcRequest,
+    mode: "prompt" | QueueBehavior,
+  ): Promise<RpcResponse> {
     const session = this.getActiveSession();
     const message = asAgentMessage(request.payload);
     if (!message) {
       return errorResponse(request, "payload.message is required");
     }
 
-    await this.sessionStore.append(session.path, { type: "message", data: message, parentId: message.parentId });
+    await this.sessionStore.append(session.path, {
+      type: "message",
+      data: message,
+      parentId: message.parentId,
+    });
 
     const result = mode === "prompt"
       ? await session.agent.prompt({ message })
@@ -193,12 +223,20 @@ export class RpcExecutionService {
     const provider = payload.provider;
     const modelId = payload.modelId;
     if (typeof provider !== "string" || typeof modelId !== "string") {
-      return errorResponse(request, "payload.provider and payload.modelId are required");
+      return errorResponse(
+        request,
+        "payload.provider and payload.modelId are required",
+      );
     }
 
-    const idx = this.models.findIndex((model) => model.provider === provider && model.modelId === modelId);
+    const idx = this.models.findIndex((model) =>
+      model.provider === provider && model.modelId === modelId
+    );
     if (idx === -1) {
-      this.models.push({ provider: provider as LlmModelId["provider"], modelId });
+      this.models.push({
+        provider: provider as LlmModelId["provider"],
+        modelId,
+      });
       this.modelIndex = this.models.length - 1;
     } else {
       this.modelIndex = idx;
@@ -211,7 +249,10 @@ export class RpcExecutionService {
       return errorResponse(request, "no models available");
     }
     this.modelIndex = (this.modelIndex + 1) % this.models.length;
-    return ok(request, { activeModel: this.models[this.modelIndex], index: this.modelIndex });
+    return ok(request, {
+      activeModel: this.models[this.modelIndex],
+      index: this.modelIndex,
+    });
   }
 
   private handleAvailableModels(request: RpcRequest): RpcResponse {
@@ -259,25 +300,38 @@ export class RpcExecutionService {
     const session = this.getActiveSession();
     const entries = await this.sessionStore.readAll(session.path);
     const payload = asObject(request.payload);
-    const requestedId = typeof payload.entryId === "string" ? payload.entryId : entries.at(-1)?.id;
+    const requestedId = typeof payload.entryId === "string"
+      ? payload.entryId
+      : entries.at(-1)?.id;
     if (!requestedId) {
       return errorResponse(request, "no entries available to fork from");
     }
-    const parentEntry = entries.find((entry) => entry.id === requestedId || entry.data.id === requestedId);
+    const parentEntry = entries.find((entry) =>
+      entry.id === requestedId || entry.data.id === requestedId
+    );
     if (!parentEntry) {
       return errorResponse(request, `fork parent not found: ${requestedId}`);
     }
     const forkedId = await this.sessionStore.fork(session.path, parentEntry.id);
-    return ok(request, { sessionId: session.id, parentId: parentEntry.id, forkedEntryId: forkedId });
+    return ok(request, {
+      sessionId: session.id,
+      parentId: parentEntry.id,
+      forkedEntryId: forkedId,
+    });
   }
 
-  private async handleTreeNavigation(request: RpcRequest): Promise<RpcResponse> {
+  private async handleTreeNavigation(
+    request: RpcRequest,
+  ): Promise<RpcResponse> {
     const session = this.getActiveSession();
     const payload = asObject(request.payload);
     const action = payload.action;
     const entryId = payload.entryId;
     if (typeof action !== "string" || typeof entryId !== "string") {
-      return errorResponse(request, "payload.action and payload.entryId are required");
+      return errorResponse(
+        request,
+        "payload.action and payload.entryId are required",
+      );
     }
 
     if (action === "parent") {
@@ -291,7 +345,10 @@ export class RpcExecutionService {
     }
 
     if (action === "linearize") {
-      const chain = await this.sessionStore.linearizeFrom(session.path, entryId);
+      const chain = await this.sessionStore.linearizeFrom(
+        session.path,
+        entryId,
+      );
       return ok(request, { sessionId: session.id, action, nodes: chain });
     }
 
@@ -324,7 +381,9 @@ export class RpcExecutionService {
       sessionId: session.id,
       tool: "bash",
       output: result.content.content,
-      isError: result.content.isError ?? false,
+      isError: result.content.type === "toolResult"
+        ? result.content.isError ?? false
+        : false,
       debug: result.debug,
     });
   }
@@ -353,7 +412,9 @@ export class RpcExecutionService {
   }
 }
 
-export async function createRpcExecutionService(options: RpcExecutionOptions = {}): Promise<RpcExecutionService> {
+export async function createRpcExecutionService(
+  options: RpcExecutionOptions = {},
+): Promise<RpcExecutionService> {
   const service = new RpcExecutionService(options);
   await service.initialize();
   return service;
