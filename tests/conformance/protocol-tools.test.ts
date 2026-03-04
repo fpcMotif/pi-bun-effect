@@ -70,6 +70,7 @@ test("conformance: builtin tools satisfy read/write/edit/bash contracts", async 
       "tool:bash",
     ]),
     trust,
+    sandboxRoot: root,
   };
 
   const readResult = await registry.execute(context, {
