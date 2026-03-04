@@ -1,9 +1,7 @@
 import {
   createRpcProtocol,
-  type RpcEvent,
-  type RpcRequest,
-  type RpcResponse,
 } from "@pi-bun-effect/rpc";
+import { createRpcExecutionService } from "./rpc-service";
 
 export interface CliCommand {
   name: string;
@@ -85,23 +83,6 @@ function formatEvent(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function makeTurnEvent(
-  sessionId: string,
-  turn: string,
-  payload: string,
-): RpcEvent {
-  return {
-    type: "agent_event",
-    id: `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`,
-    command: "prompt",
-    payload: {
-      sessionId,
-      turn,
-      payload,
-    },
-  };
-}
-
 export async function runCli(
   argv: string[] = process.argv.slice(2),
 ): Promise<number> {
@@ -132,14 +113,14 @@ export async function runCli(
   if (parsed.mode === "rpc") {
     const raw = await new Response(Bun.stdin).text();
     const lines = raw.split(/\r?\n/);
-    const sessionId = `session-${Date.now().toString(16)}`;
+    const rpcService = await createRpcExecutionService();
 
     for (const rawLine of lines) {
       const request = protocol.parseLine(rawLine);
       if (!request) {
         continue;
       }
-      const response = await handleRpcCommand(protocol, request, sessionId, 0);
+      const response = await rpcService.handle(request);
       if (response) {
         console.log(protocol.encodeResponse(response));
         if (request.command === "abort") {
@@ -166,82 +147,6 @@ export async function runCli(
   return 0;
 }
 
-async function handleRpcCommand(
-  protocol: ReturnType<typeof createRpcProtocol>,
-  request: RpcRequest,
-  sessionId: string,
-  turn: number,
-): Promise<RpcResponse> {
-  if (request.command === "prompt") {
-    const prompt = (
-      request.payload as { message?: { content?: unknown[] } } | undefined
-    )?.message;
-    const payload = { sessionId, received: prompt ?? null, turn };
-    const event = makeTurnEvent(
-      sessionId,
-      `${turn}`,
-      `${JSON.stringify(payload)}`,
-    );
-    console.log(formatEvent(event));
-
-    return {
-      id: request.id,
-      command: request.command,
-      status: "ok",
-      result: payload,
-    };
-  }
-
-  if (
-    request.command === "steer"
-    || request.command === "followUp"
-    || request.command === "follow_up"
-  ) {
-    return {
-      id: request.id,
-      command: request.command,
-      status: "ok",
-      result: {
-        sessionId,
-        command: request.command,
-        queued: true,
-      },
-    };
-  }
-
-  if (request.command === "get_state") {
-    return {
-      id: request.id,
-      command: request.command,
-      status: "ok",
-      result: {
-        sessionId,
-        busy: false,
-        queued: 0,
-      },
-    };
-  }
-
-  if (request.command === "get_messages") {
-    return {
-      id: request.id,
-      command: request.command,
-      status: "ok",
-      result: {
-        sessionId,
-        messages: [],
-      },
-    };
-  }
-
-  return {
-    id: request.id,
-    command: request.command,
-    status: "error",
-    error: `unsupported command: ${request.command}`,
-  };
-}
-
 export function listCliCommands(): CliCommand[] {
   return [
     { name: "version", run: async () => runCli(["--version"]) },
@@ -255,3 +160,5 @@ export function listCliCommands(): CliCommand[] {
     },
   ];
 }
+
+export * from "./rpc-service";
