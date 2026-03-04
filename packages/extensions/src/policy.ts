@@ -73,7 +73,7 @@ const defaultPolicy: ExtensionPolicy = {
   ],
   allowCommands: [],
   denyCommands: ["reboot", "shutdown"],
-  denyPatterns: ["rm -rf", "mkfs", "dd if=", "curl .*|", "/bin/sh -c", "nc -l"],
+  denyPatterns: ["rm -rf", "mkfs", "dd if=", "curl .*\\|", "/bin/sh -c", "nc -l"],
 };
 
 function compilePatterns(patterns: string[]): RegExp[] {
@@ -125,15 +125,27 @@ export class DefaultPolicyEngine implements PolicyEngine {
     const policy = this.policies.get(extensionId) ?? defaultPolicy;
     const lowered = command.trim();
 
-    const matchedPattern = this.denyPatternRegs.find((pattern) =>
+    const matchedDefaultPattern = this.denyPatternRegs.find((pattern) =>
       pattern.test(lowered)
     );
-    if (matchedPattern) {
+    if (matchedDefaultPattern) {
       return {
         allowed: false,
-        reason: `Blocked by default safety pattern: ${matchedPattern.source}`,
+        reason:
+          `Blocked by default safety pattern: ${matchedDefaultPattern.source}`,
         suggestedFix:
           "Pass an explicit allow policy and safer command variant.",
+      };
+    }
+
+    const matchedExtensionPattern = policy.denyPatterns.find((pattern) =>
+      new RegExp(pattern, "i").test(lowered)
+    );
+    if (matchedExtensionPattern) {
+      return {
+        allowed: false,
+        reason: `Blocked by extension safety pattern: ${matchedExtensionPattern}`,
+        suggestedFix: "Use a safer command variant.",
       };
     }
 
@@ -147,15 +159,10 @@ export class DefaultPolicyEngine implements PolicyEngine {
     }
 
     const commandName = lowered.split(" ")[0] ?? "";
-    if (policy.denyCommands.includes(commandName)) {
-      return {
-        allowed: false,
-        reason: "Command denied by denylist",
-        suggestedFix: "Use allowlist policy to explicitly allow this command.",
-      };
-    }
-
-    if (policy.denyCommands.includes(lowered)) {
+    if (
+      policy.denyCommands.includes(commandName)
+      || policy.denyCommands.includes(lowered)
+    ) {
       return {
         allowed: false,
         reason: "Command denied by denylist",
