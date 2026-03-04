@@ -91,29 +91,44 @@ export class InMemorySearchService implements SearchService {
   }
 
   async queryFiles(pattern: string, limit = 20): Promise<SearchMatch[]> {
+    if (limit <= 0) {
+      return [];
+    }
     const normalized = normalizeToken(pattern);
-    const matches = Array.from(this.index.keys())
-      .map((path) => ({
-        path,
-        score: path.toLowerCase().includes(normalized) ? 1 : 0,
-        snippet: path,
-      }))
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
+    const matches: SearchMatch[] = [];
+    for (const path of this.index.keys()) {
+      if (path.toLowerCase().includes(normalized)) {
+        matches.push({
+          path,
+          score: 1,
+          snippet: path,
+        });
+        if (matches.length >= limit) {
+          break;
+        }
+      }
+    }
     return matches;
   }
 
   async queryContent(query: string, limit = 20): Promise<SearchMatch[]> {
+    if (limit <= 0) {
+      return [];
+    }
     const normalized = normalizeToken(query);
-    const matches = Array.from(this.index.keys())
-      .map((path) => ({
-        path,
-        score: path.toLowerCase().includes(normalized) ? 1 : 0,
-        snippet: path,
-      }))
-      .filter((entry) => entry.score > 0)
-      .slice(0, limit);
+    const matches: SearchMatch[] = [];
+    for (const path of this.index.keys()) {
+      if (path.toLowerCase().includes(normalized)) {
+        matches.push({
+          path,
+          score: 1,
+          snippet: path,
+        });
+        if (matches.length >= limit) {
+          break;
+        }
+      }
+    }
     return matches;
   }
 
@@ -122,9 +137,10 @@ export class InMemorySearchService implements SearchService {
     weights: { fuzzy: number; frecency: number; git: number },
   ): number {
     const best = this.index.size === 0 ? 0 : 1;
+    const firstPath = this.index.keys().next().value ?? "";
     return (
       rankPath(
-        Array.from(this.index.keys())[0] ?? "",
+        firstPath,
         pattern,
         weights,
         1,
