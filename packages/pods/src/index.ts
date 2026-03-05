@@ -16,7 +16,7 @@ export interface PodManager {
   stopModel(modelId: string): Promise<void>;
   listModels(): Promise<string[]>;
   getEndpoint(modelId: string): string;
-  renderStartCommand(modelId: string): string;
+  renderStartCommand(modelId: string): string[];
   getPodConfig(): Promise<PodConfig | null>;
 }
 
@@ -27,14 +27,14 @@ export interface CommandResult {
 }
 
 export interface PodCommandRunner {
-  run(command: string): Promise<CommandResult>;
+  run(command: string[]): Promise<CommandResult>;
 }
 
-function defaultRunner(command: string): Promise<CommandResult> {
+function defaultRunner(command: string[]): Promise<CommandResult> {
   if (typeof Bun === "undefined") {
     return Promise.resolve({ stdout: "", stderr: "", exitCode: 0 });
   }
-  const process = Bun.spawnSync(["sh", "-c", command]);
+  const process = Bun.spawnSync(command);
   return Promise.resolve({
     stdout: process.stdout.toString(),
     stderr: process.stderr.toString(),
@@ -101,15 +101,23 @@ export class InMemoryPodManager implements PodManager {
     }`;
   }
 
-  renderStartCommand(modelId: string): string {
+  renderStartCommand(modelId: string): string[] {
     if (!this.podConfig) {
       throw new Error("pod not configured");
     }
-    return `python3 -m vllm.entrypoints.openai.api_server --model ${
-      JSON.stringify(
-        modelId,
-      )
-    } --host 0.0.0.0 --port 11434 --max-num-seqs 32`;
+    return [
+      "python3",
+      "-m",
+      "vllm.entrypoints.openai.api_server",
+      "--model",
+      modelId,
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "11434",
+      "--max-num-seqs",
+      "32"
+    ];
   }
 }
 
