@@ -92,28 +92,40 @@ export class InMemorySearchService implements SearchService {
 
   async queryFiles(pattern: string, limit = 20): Promise<SearchMatch[]> {
     const normalized = normalizeToken(pattern);
-    const matches = Array.from(this.index.keys())
-      .map((path) => ({
-        path,
-        score: path.toLowerCase().includes(normalized) ? 1 : 0,
-        snippet: path,
-      }))
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
-    return matches;
+    const matches: SearchMatch[] = [];
+
+    for (const path of this.index.keys()) {
+      const lowerPath = path.toLowerCase();
+      if (lowerPath.includes(normalized)) {
+        matches.push({
+          path,
+          score: 1,
+          snippet: path,
+        });
+      }
+    }
+
+    return matches.sort((a, b) => b.score - a.score).slice(0, limit);
   }
 
   async queryContent(query: string, limit = 20): Promise<SearchMatch[]> {
     const normalized = normalizeToken(query);
-    const matches = Array.from(this.index.keys())
-      .map((path) => ({
-        path,
-        score: path.toLowerCase().includes(normalized) ? 1 : 0,
-        snippet: path,
-      }))
-      .filter((entry) => entry.score > 0)
-      .slice(0, limit);
+    const matches: SearchMatch[] = [];
+
+    for (const path of this.index.keys()) {
+      if (matches.length >= limit) {
+        break;
+      }
+      const lowerPath = path.toLowerCase();
+      if (lowerPath.includes(normalized)) {
+        matches.push({
+          path,
+          score: 1,
+          snippet: path,
+        });
+      }
+    }
+
     return matches;
   }
 
