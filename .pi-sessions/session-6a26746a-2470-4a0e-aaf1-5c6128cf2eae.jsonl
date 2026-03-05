@@ -1,0 +1,2 @@
+{"version":3,"id":"c3bd94df-4db7-465e-b9ba-9d9d10c47df6","createdAt":"2026-03-05T00:27:35.314Z","updatedAt":"2026-03-05T00:27:35.314Z"}
+{"type":"message","data":{"type":"user","role":"user","id":"rpc-hello","timestamp":"2026-03-05T00:27:35.196Z","content":[{"type":"text","text":"hello"}]},"id":"4eb3540c-0ec8-4234-a80b-01a6724d06b2","timestamp":"2026-03-05T00:27:35.316Z"}
