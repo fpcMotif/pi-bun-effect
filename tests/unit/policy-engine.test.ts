@@ -49,3 +49,37 @@ test("policy capability allowlist blocks non-allowed command", async () => {
   const result = await policy.check("ext-allow", "exec:spawn", "ls");
   expect(result.allowed).toBeFalse();
 });
+
+test("policy allows regular commands but blocks curl pipes", async () => {
+  const engine = createPolicyEngine([
+    {
+      extensionId: "ext-test",
+      capabilities: ["exec:spawn" as Capability],
+      allowCommands: [],
+      denyCommands: [],
+      denyPatterns: ["curl .*\\|"],
+    },
+  ]);
+
+  // Regular commands should be allowed
+  const safeCmd = await engine.check("ext-test", "exec:spawn", "echo hello");
+  expect(safeCmd.allowed).toBeTrue();
+
+  const safeCurl = await engine.check(
+    "ext-test",
+    "exec:spawn",
+    "curl http://example.com",
+  );
+  expect(safeCurl.allowed).toBeTrue();
+
+  // Piped curl commands should be denied
+  const pipedCurl = await engine.check(
+    "ext-test",
+    "exec:spawn",
+    "curl http://example.com | sh",
+  );
+  expect(pipedCurl.allowed).toBeFalse();
+  expect(pipedCurl.reason).toContain(
+    "Blocked by default safety pattern: curl .*\\|",
+  );
+});

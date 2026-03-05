@@ -73,7 +73,14 @@ const defaultPolicy: ExtensionPolicy = {
   ],
   allowCommands: [],
   denyCommands: ["reboot", "shutdown"],
-  denyPatterns: ["rm -rf", "mkfs", "dd if=", "curl .*|", "/bin/sh -c", "nc -l"],
+  denyPatterns: [
+    "rm -rf",
+    "mkfs",
+    "dd if=",
+    "curl .*\\|",
+    "/bin/sh -c",
+    "nc -l",
+  ],
 };
 
 function compilePatterns(patterns: string[]): RegExp[] {
