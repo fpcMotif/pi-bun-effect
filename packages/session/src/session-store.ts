@@ -1,5 +1,11 @@
 import { type AgentMessage, isAgentMessage } from "@pi-bun-effect/core";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  access,
+  appendFile,
+  mkdir,
+  readFile,
+  writeFile,
+} from "node:fs/promises";
 import { dirname } from "node:path";
 
 export type SessionVersion = 1 | 2 | 3;
@@ -300,7 +306,5 @@ export function createSessionStore(_rootDirectory = ""): SessionStore {
 }
 
 async function appendLine(path: string, line: string): Promise<void> {
-  const current = await readFile(path, "utf8");
-  const content = `${current.trimEnd()}\n${line}\n`;
-  await writeFile(path, content, "utf8");
+  await appendFile(path, `${line}\n`, "utf8");
 }
