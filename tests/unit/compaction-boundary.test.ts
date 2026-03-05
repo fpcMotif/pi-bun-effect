@@ -1,36 +1,9 @@
 import { expect, test } from "bun:test";
+import { compactionCutPoint } from "@pi-bun-effect/agent";
 
 interface TurnNode {
   role: "assistant" | "tool";
   type: "assistant" | "toolResult";
-}
-
-function compactionCutPoint(nodes: TurnNode[], budget: number): number {
-  if (nodes.length <= budget) {
-    return nodes.length;
-  }
-
-  const cut = budget;
-  const prior = nodes[cut - 1];
-  const next = nodes[cut];
-
-  if (
-    prior?.role === "assistant"
-    && prior.type === "assistant"
-    && next?.type === "toolResult"
-  ) {
-    return cut;
-  }
-
-  if (
-    prior?.type === "toolResult"
-    && prior.role === "tool"
-    && prior.type === "toolResult"
-  ) {
-    return cut;
-  }
-
-  return cut;
 }
 
 test("compaction cut does not separate assistant tool-call and tool-result", () => {

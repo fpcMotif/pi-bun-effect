@@ -59,12 +59,44 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+export function compactionCutPoint<T extends Pick<AgentMessage, "role" | "type">>(
+  nodes: T[],
+  budget: number,
+): number {
+  if (nodes.length <= budget) {
+    return nodes.length;
+  }
+
+  const cut = budget;
+  const prior = nodes[cut - 1];
+  const next = nodes[cut];
+
+  if (
+    prior?.role === "assistant"
+    && prior.type === "assistant"
+    && next?.type === "toolResult"
+  ) {
+    return cut;
+  }
+
+  if (
+    prior?.type === "toolResult"
+    && prior.role === "tool"
+    && prior.type === "toolResult"
+  ) {
+    return cut;
+  }
+
+  return cut;
+}
+
 export class InMemoryAgentSession implements AgentSession {
   private state: AgentState;
   private listeners = new Set<Listener>();
   private running = false;
   private queueDepth = { steer: 0, followUp: 0 };
   private pending: QueueRequest[] = [];
+  private history: AgentMessage[] = [];
 
   constructor(private readonly config: AgentConfig) {
     this.state = {
@@ -79,10 +111,12 @@ export class InMemoryAgentSession implements AgentSession {
   }
 
   async prompt(input: TurnInput): Promise<TurnResult> {
+    this.history.push(input.message);
     return this.executeTurn("prompt", input.message.id);
   }
 
   async steer(input: TurnInput): Promise<TurnResult> {
+    this.history.push(input.message);
     return this.requestQueue(
       {
         queue: "steer",
@@ -92,6 +126,7 @@ export class InMemoryAgentSession implements AgentSession {
   }
 
   async followUp(input: TurnInput): Promise<TurnResult> {
+    this.history.push(input.message);
     return this.requestQueue(
       {
         queue: "followUp",
@@ -123,8 +158,20 @@ export class InMemoryAgentSession implements AgentSession {
   }
 
   async compact(): Promise<void> {
-    // No-op placeholder in scaffold implementation.
-    return undefined;
+    const budget = Math.max(1, Math.floor(this.history.length / 2));
+    const cut = compactionCutPoint(this.history, budget);
+
+    if (cut > 0 && cut < this.history.length) {
+      this.history = this.history.slice(cut);
+
+      this.emit({
+        type: "text_start",
+        sessionId: this.state.sessionId,
+        turnId: this.state.currentTurnId,
+        at: nowIso(),
+        text: `[System: Compacted ${cut} messages from history]`,
+      } as AgentEvent);
+    }
   }
 
   async getState(): Promise<AgentState> {
