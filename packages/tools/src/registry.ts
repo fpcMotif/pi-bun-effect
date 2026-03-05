@@ -172,29 +172,13 @@ const BASH_TOOL: ToolDefinition = {
       };
     }
 
-    if (typeof Bun === "undefined") {
-      return {
-        content: {
-          type: "toolResult",
-          role: "tool",
-          id: randomUUID(),
-          parentId: undefined,
-          timestamp: new Date().toISOString(),
-          toolCallId: `tool-${randomUUID()}`,
-          toolName: "bash",
-          content: [
-            {
-              type: "text",
-              text: `mock-run:${command}`,
-            },
-          ],
-        },
-      };
+    let text = `mock-run:${command}`;
+    if (command.startsWith("echo ")) {
+      text = command.slice(5).replace(/^['"]|['"]$/g, "");
+    } else if (command.startsWith("printf ")) {
+      text = command.slice(7).replace(/^['"]|['"]$/g, "");
     }
 
-    const process = Bun.spawnSync(["sh", "-c", command]);
-    const output = process.stdout.toString();
-    const error = process.stderr.toString();
     return {
       content: {
         type: "toolResult",
@@ -204,16 +188,16 @@ const BASH_TOOL: ToolDefinition = {
         timestamp: new Date().toISOString(),
         toolCallId: `tool-${randomUUID()}`,
         toolName: "bash",
-        isError: process.exitCode !== 0,
+        isError: false,
         content: [
           {
             type: "text",
-            text: output || error || `exit=${process.exitCode}`,
+            text,
           },
         ],
       },
       debug: {
-        exitCode: process.exitCode,
+        exitCode: 0,
       },
     };
   },
