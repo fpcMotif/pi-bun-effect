@@ -12,12 +12,14 @@ import { join } from "node:path";
 function makeContext(
   capabilities: Capability[],
   trust: TrustDecision = "trusted",
+  sandboxRoot?: string,
 ): ToolContext {
   return {
     sessionId: "cap-test",
     extensionId: "ext-cap",
     capabilities: new Set(capabilities),
     trust,
+    sandboxRoot,
   };
 }
 
@@ -81,7 +83,7 @@ test("grep tool searches file contents", async () => {
 
   const registry = createToolRegistry();
   registerBuiltinTools(registry);
-  const ctx = makeContext(["tool:grep"]);
+  const ctx = makeContext(["tool:grep"], "trusted", root);
 
   const result = await registry.execute(ctx, {
     name: "grep",
@@ -98,7 +100,7 @@ test("find tool finds files by pattern", async () => {
 
   const registry = createToolRegistry();
   registerBuiltinTools(registry);
-  const ctx = makeContext(["tool:find"]);
+  const ctx = makeContext(["tool:find"], "trusted", root);
 
   const result = await registry.execute(ctx, {
     name: "find",
@@ -115,7 +117,7 @@ test("ls tool lists directory contents", async () => {
 
   const registry = createToolRegistry();
   registerBuiltinTools(registry);
-  const ctx = makeContext(["tool:ls"]);
+  const ctx = makeContext(["tool:ls"], "trusted", root);
 
   const result = await registry.execute(ctx, {
     name: "ls",
