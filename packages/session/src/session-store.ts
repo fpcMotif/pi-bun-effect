@@ -271,7 +271,10 @@ export class JsonlSessionStore implements SessionStore {
     entryId: string,
   ): Promise<JsonlSessionEntry[]> {
     const entries = await this.readAllInternal(path);
-    const map = new Map(entries.entries.map((entry) => [entry.id, entry]));
+    const map = new Map<string, JsonlSessionEntry>();
+    for (const entry of entries.entries) {
+      map.set(entry.id, entry);
+    }
     const chain: JsonlSessionEntry[] = [];
     let current: JsonlSessionEntry | undefined = map.get(entryId);
 
