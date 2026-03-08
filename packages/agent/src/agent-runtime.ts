@@ -87,11 +87,7 @@ export function compactionCutPoint<
     return cut;
   }
 
-  if (
-    prior?.type === "toolResult"
-    && prior.role === "tool"
-    && prior.type === "toolResult"
-  ) {
+  if (prior?.role === "tool" && prior.type === "toolResult") {
     return cut;
   }
 

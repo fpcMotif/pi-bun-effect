@@ -102,7 +102,19 @@ export function allowsCapabilityForTrust(
 }
 
 function compilePatterns(patterns: string[]): RegExp[] {
-  return patterns.map((pattern) => new RegExp(pattern, "i"));
+  const compiled: RegExp[] = [];
+  for (const pattern of patterns) {
+    try {
+      compiled.push(new RegExp(pattern, "i"));
+    } catch {
+      compiled.push(new RegExp(escapeRegExp(pattern), "i"));
+    }
+  }
+  return compiled;
+}
+
+function escapeRegExp(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function createTrustRecord(

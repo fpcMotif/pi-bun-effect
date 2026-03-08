@@ -9,8 +9,9 @@ import { beforeEach, describe, expect, test } from "bun:test";
 describe("InMemorySlackBot", () => {
   let bot: InMemorySlackBot;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     bot = createSlackBot();
+    await bot.start({ token: "test-token", socketMode: true });
   });
 
   test("createSlackBot returns an instance of InMemorySlackBot", () => {
@@ -18,24 +19,21 @@ describe("InMemorySlackBot", () => {
   });
 
   test("start sets running to true", async () => {
-    const config: SlackConfig = {
-      token: "test-token",
-      socketMode: true,
-    };
-
-    await bot.start(config);
     // @ts-expect-error testing private runtime state
     expect(bot.running).toBeTrue();
   });
 
   test("stop sets running to false", async () => {
-    await bot.start({ token: "test", socketMode: true });
-    // @ts-expect-error testing private runtime state
-    expect(bot.running).toBeTrue();
-
     await bot.stop();
     // @ts-expect-error testing private runtime state
     expect(bot.running).toBeFalse();
+  });
+
+  test("routeEvent throws when bot is not running", async () => {
+    await bot.stop();
+    expect(() =>
+      bot.routeEvent({ channel: "C1", user: "U1", text: "msg" })
+    ).toThrow("Bot is not running");
   });
 
   test("routeEvent creates new channel state on first event", () => {

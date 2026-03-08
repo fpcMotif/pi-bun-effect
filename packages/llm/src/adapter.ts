@@ -141,17 +141,9 @@ export class ReplayLlmProvider implements LlmProvider {
 
   async complete(
     model: LlmModelId,
-    context: AgentMessage[],
-    options?: LlmOptions,
+    _context: AgentMessage[],
+    _options?: LlmOptions,
   ): Promise<AgentMessage> {
-    await Promise.resolve(
-      {
-        model,
-        options,
-        provider: this.provider,
-        baseUrl: this.baseUrl,
-      } as const,
-    );
     return {
       type: "assistant",
       role: "assistant",

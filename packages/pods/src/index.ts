@@ -30,6 +30,12 @@ export interface PodCommandRunner {
   run(command: string): Promise<CommandResult>;
 }
 
+const VALID_HOSTNAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+
+function isValidHostname(host: string): boolean {
+  return VALID_HOSTNAME.test(host) && host.length <= 253;
+}
+
 function defaultRunner(command: string[]): Promise<CommandResult> {
   if (typeof Bun === "undefined") {
     return Promise.resolve({ stdout: "", stderr: "", exitCode: 0 });
@@ -54,6 +60,9 @@ export class InMemoryPodManager implements PodManager {
   ) {}
 
   async setup(config: PodConfig): Promise<void> {
+    if (!isValidHostname(config.sshHost)) {
+      throw new Error(`Invalid SSH host: ${config.sshHost}`);
+    }
     this.podConfig = {
       name: config.name,
       provider: config.provider,
@@ -104,11 +113,17 @@ export class InMemoryPodManager implements PodManager {
     if (!this.podConfig) {
       throw new Error("pod not configured");
     }
-    return `python3 -m vllm.entrypoints.openai.api_server --model ${
-      JSON.stringify(
-        modelId,
-      )
-    } --host 0.0.0.0 --port 11434 --max-num-seqs 32`;
+    const safeModelId = modelId.replace(/[^a-zA-Z0-9._:/-]/g, "");
+    if (!safeModelId || safeModelId !== modelId) {
+      throw new Error(`Invalid model ID: ${modelId}`);
+    }
+    return [
+      "python3", "-m", "vllm.entrypoints.openai.api_server",
+      "--model", JSON.stringify(safeModelId),
+      "--host", "0.0.0.0",
+      "--port", "11434",
+      "--max-num-seqs", "32",
+    ].join(" ");
   }
 
   private buildStartArgs(modelId: string): string[] {
