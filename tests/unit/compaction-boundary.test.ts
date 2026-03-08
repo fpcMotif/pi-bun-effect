@@ -1,5 +1,5 @@
-import { expect, test } from "bun:test";
 import { compactionCutPoint } from "@pi-bun-effect/agent";
+import { expect, test } from "bun:test";
 
 interface TurnNode {
   role: "assistant" | "tool";

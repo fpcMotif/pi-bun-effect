@@ -59,7 +59,9 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-export function compactionCutPoint<T extends Pick<AgentMessage, "role" | "type">>(
+export function compactionCutPoint<
+  T extends Pick<AgentMessage, "role" | "type">,
+>(
   nodes: T[],
   budget: number,
 ): number {
