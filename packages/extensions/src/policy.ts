@@ -73,7 +73,14 @@ const defaultPolicy: ExtensionPolicy = {
   ],
   allowCommands: [],
   denyCommands: ["reboot", "shutdown"],
-  denyPatterns: ["rm -rf", "mkfs", "dd if=", "curl .*|", "/bin/sh -c", "nc -l"],
+  denyPatterns: [
+    "rm -rf",
+    "mkfs",
+    "dd if=",
+    "curl .*\\|",
+    "/bin/sh -c",
+    "nc -l",
+  ],
 };
 
 function compilePatterns(patterns: string[]): RegExp[] {
@@ -123,17 +130,33 @@ export class DefaultPolicyEngine implements PolicyEngine {
     command: string,
   ): Promise<CommandMediationResult> {
     const policy = this.policies.get(extensionId) ?? defaultPolicy;
-    const lowered = command.trim();
+    const normalizedCommand = command.trim().toLowerCase();
 
-    const matchedPattern = this.denyPatternRegs.find((pattern) =>
-      pattern.test(lowered)
+    const matchedDefaultPattern = this.denyPatternRegs.find((pattern) =>
+      pattern.test(normalizedCommand)
     );
-    if (matchedPattern) {
+    if (matchedDefaultPattern) {
       return {
         allowed: false,
-        reason: `Blocked by default safety pattern: ${matchedPattern.source}`,
+        reason:
+          `Blocked by default safety pattern: ${matchedDefaultPattern.source}`,
         suggestedFix:
           "Pass an explicit allow policy and safer command variant.",
+      };
+    }
+
+    const extensionPatterns = policy === defaultPolicy
+      ? []
+      : policy.denyPatterns;
+    const matchedExtensionPattern = extensionPatterns.find((pattern) =>
+      new RegExp(pattern, "i").test(normalizedCommand)
+    );
+    if (matchedExtensionPattern) {
+      return {
+        allowed: false,
+        reason:
+          `Blocked by extension safety pattern: ${matchedExtensionPattern}`,
+        suggestedFix: "Use a safer command variant.",
       };
     }
 
@@ -146,16 +169,11 @@ export class DefaultPolicyEngine implements PolicyEngine {
       };
     }
 
-    const commandName = lowered.split(" ")[0] ?? "";
-    if (policy.denyCommands.includes(commandName)) {
-      return {
-        allowed: false,
-        reason: "Command denied by denylist",
-        suggestedFix: "Use allowlist policy to explicitly allow this command.",
-      };
-    }
-
-    if (policy.denyCommands.includes(lowered)) {
+    const commandName = normalizedCommand.split(" ")[0] ?? "";
+    if (
+      policy.denyCommands.includes(commandName)
+      || policy.denyCommands.includes(normalizedCommand)
+    ) {
       return {
         allowed: false,
         reason: "Command denied by denylist",
@@ -165,7 +183,9 @@ export class DefaultPolicyEngine implements PolicyEngine {
 
     if (
       policy.allowCommands.length > 0
-      && !policy.allowCommands.some((value) => lowered === value)
+      && !policy.allowCommands.some((value) =>
+        normalizedCommand === value.toLowerCase()
+      )
     ) {
       return {
         allowed: false,
