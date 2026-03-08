@@ -112,43 +112,54 @@ export class RpcExecutionService {
   async handle(request: RpcRequest): Promise<RpcResponse> {
     try {
       const command = request.command;
-      if (command === "prompt") return await this.handleTurn(request, "prompt");
-      if (command === "steer") return await this.handleTurn(request, "steer");
-      if (command === "followUp" || command === "follow_up") {
-        return await this.handleTurn(request, "followUp");
+      switch (command) {
+        case "prompt":
+          return await this.handleTurn(request, "prompt");
+        case "steer":
+          return await this.handleTurn(request, "steer");
+        case "followUp":
+        case "follow_up":
+          return await this.handleTurn(request, "followUp");
+        case "abort":
+          return await this.handleAbort(request);
+        case "get_state":
+          return await this.handleGetState(request);
+        case "get_messages":
+          return await this.handleGetMessages(request);
+        case "set_model":
+          return await this.handleSetModel(request);
+        case "cycle_model":
+          return this.handleCycleModel(request);
+        case "get_available_models":
+          return this.handleAvailableModels(request);
+        case "compact":
+          return await this.handleCompact(request);
+        case "set_auto_retry":
+          return this.handleSetAutoRetry(request);
+        case "abort_retry":
+          return this.handleAbortRetry(request);
+        case "new_session":
+          return await this.handleNewSession(request);
+        case "switch":
+          return await this.handleSwitch(request);
+        case "fork":
+          return await this.handleFork(request);
+        case "tree_navigation":
+          return await this.handleTreeNavigation(request);
+        case "bash":
+          return await this.handleBash(request);
+        case "set_thinking_level":
+        case "cycle_thinking_level":
+        case "set_steering_mode":
+        case "set_follow_up_mode":
+        case "set_auto_compaction":
+          return ok(request, { command, accepted: true });
+        default:
+          return errorResponse(
+            request,
+            `unsupported command: ${request.command}`,
+          );
       }
-      if (command === "abort") return await this.handleAbort(request);
-      if (command === "get_state") return await this.handleGetState(request);
-      if (command === "get_messages") {
-        return await this.handleGetMessages(request);
-      }
-      if (command === "set_model") return await this.handleSetModel(request);
-      if (command === "cycle_model") return this.handleCycleModel(request);
-      if (command === "get_available_models") {
-        return this.handleAvailableModels(request);
-      }
-      if (command === "compact") return await this.handleCompact(request);
-      if (command === "set_auto_retry") return this.handleSetAutoRetry(request);
-      if (command === "abort_retry") return this.handleAbortRetry(request);
-      if (command === "new_session") {
-        return await this.handleNewSession(request);
-      }
-      if (command === "switch") return await this.handleSwitch(request);
-      if (command === "fork") return await this.handleFork(request);
-      if (command === "tree_navigation") {
-        return await this.handleTreeNavigation(request);
-      }
-      if (command === "bash") return await this.handleBash(request);
-      if (
-        command === "set_thinking_level"
-        || command === "cycle_thinking_level"
-        || command === "set_steering_mode"
-        || command === "set_follow_up_mode"
-        || command === "set_auto_compaction"
-      ) {
-        return ok(request, { command, accepted: true });
-      }
-      return errorResponse(request, `unsupported command: ${request.command}`);
     } catch (error) {
       return errorResponse(
         request,
