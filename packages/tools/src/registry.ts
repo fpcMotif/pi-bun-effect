@@ -1,5 +1,9 @@
 import type { AgentMessage } from "@pi-bun-effect/core";
-import type { Capability, TrustDecision } from "@pi-bun-effect/extensions";
+import {
+  allowsCapabilityForTrust,
+  type Capability,
+  type TrustDecision,
+} from "@pi-bun-effect/extensions";
 import { randomUUID } from "node:crypto";
 import { readdir, realpath } from "node:fs/promises";
 import { basename, dirname, resolve, sep } from "node:path";
@@ -190,6 +194,9 @@ const EDIT_TOOL: ToolDefinition = {
       const path = String(invocation.input.path ?? "");
       const resolved = await resolveSafePath(path, context.sandboxRoot);
       const find = String(invocation.input.find ?? "");
+      if (!find) {
+        throw new Error("edit requires a non-empty find value");
+      }
       const replace = String(invocation.input.replace ?? "");
       const original = typeof Bun !== "undefined"
         ? await Bun.file(resolved).text()
@@ -518,6 +525,10 @@ export class InMemoryToolRegistry implements ToolRegistry {
     const capKey = `tool:${invocation.name}` as Capability;
     if (!context.capabilities.has(capKey)) {
       throw new Error(`capability denied: ${capKey}`);
+    }
+
+    if (!allowsCapabilityForTrust(context.trust, capKey)) {
+      throw new Error(`trust denied: ${context.trust} cannot use ${capKey}`);
     }
 
     return definition.run(context, invocation);

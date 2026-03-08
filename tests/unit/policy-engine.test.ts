@@ -19,7 +19,12 @@ test("policy requires explicit capability for non-tool actions", async () => {
   expect(denied.allowed).toBeFalse();
 
   await engine.setTrust("ext-bash", "trusted", "operator", "bootstrap");
-  await engine.setTrust("ext-bash", "trusted", "operator", "bootstrap");
+  const stillDenied = await engine.check(
+    "ext-bash",
+    "exec:spawn",
+    "echo hello",
+  );
+  expect(stillDenied.allowed).toBeFalse();
 });
 
 test("trust lifecycle is persisted", async () => {
@@ -61,6 +66,8 @@ test("policy allows regular commands but blocks curl pipes", async () => {
     },
   ]);
 
+  await engine.setTrust("ext-test", "trusted", "operator", "approved");
+
   const safeCmd = await engine.check("ext-test", "exec:spawn", "echo hello");
   expect(safeCmd.allowed).toBeTrue();
 
@@ -80,4 +87,19 @@ test("policy allows regular commands but blocks curl pipes", async () => {
   expect(pipedCurl.reason).toContain(
     "Blocked by default safety pattern: curl .*\\|",
   );
+});
+
+test("acknowledged trust only permits read-only capabilities", () => {
+  const engine = createPolicyEngine([
+    {
+      extensionId: "ext-review",
+      capabilities: ["tool:read", "tool:write"],
+      allowCommands: [],
+      denyCommands: [],
+      denyPatterns: [],
+    },
+  ]);
+
+  expect(engine.evaluateCapability("ext-review", "tool:read")).toBeTrue();
+  expect(engine.evaluateCapability("ext-review", "tool:write")).toBeFalse();
 });

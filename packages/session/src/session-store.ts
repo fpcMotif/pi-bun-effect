@@ -139,14 +139,6 @@ function readJsonl(text: string): ParsedSession {
   return { header, entries };
 }
 
-function stringifyHeader(header: SessionHeader): string {
-  return JSON.stringify(header);
-}
-
-function stringifyEntry(entry: JsonlSessionEntry): string {
-  return JSON.stringify(entry);
-}
-
 export class JsonlSessionStore implements SessionStore {
   async open(path: string): Promise<void> {
     const directory = dirname(path);
@@ -160,7 +152,7 @@ export class JsonlSessionStore implements SessionStore {
         createdAt: nowIso(),
         updatedAt: nowIso(),
       };
-      await writeFile(path, `${stringifyHeader(header)}\n`, "utf8");
+      await writeFile(path, `${JSON.stringify(header)}\n`, "utf8");
     }
   }
 
@@ -181,7 +173,7 @@ export class JsonlSessionStore implements SessionStore {
       id: entry.id ?? makeId(),
       timestamp: entry.timestamp ?? nowIso(),
     };
-    await appendLine(path, stringifyEntry(prepared));
+    await appendLine(path, JSON.stringify(prepared));
     return prepared;
   }
 
@@ -203,8 +195,8 @@ export class JsonlSessionStore implements SessionStore {
       createdAt: parsed.header.createdAt,
       updatedAt: nowIso(),
     };
-    const body = `${stringifyHeader(migrated)}\n${
-      parsed.entries.map(stringifyEntry).join("\n")
+    const body = `${JSON.stringify(migrated)}\n${
+      parsed.entries.map((entry) => JSON.stringify(entry)).join("\n")
     }${parsed.entries.length > 0 ? "\n" : ""}`;
     await writeFile(path, body, "utf8");
 

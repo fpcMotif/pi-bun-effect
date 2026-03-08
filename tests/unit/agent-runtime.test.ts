@@ -1,7 +1,18 @@
 import { InMemoryAgentSession } from "@pi-bun-effect/agent";
+import type { AgentMessage } from "@pi-bun-effect/core";
 import { expect, test } from "bun:test";
 
-test("cancelCurrentTurn emits abort event when running", async () => {
+function userMessage(id: string): AgentMessage {
+  return {
+    type: "user",
+    role: "user",
+    id,
+    timestamp: new Date().toISOString(),
+    content: [{ type: "text", text: id }],
+  };
+}
+
+test("cancelCurrentTurn emits abort event through the public prompt flow", async () => {
   const session = new InMemoryAgentSession({
     sessionId: "test-session",
     contextWindowTokens: 1000,
@@ -14,13 +25,21 @@ test("cancelCurrentTurn emits abort event when running", async () => {
     emitted.push(event);
   });
 
-  (session as unknown as { running: boolean }).running = true;
+  const turn = session.prompt({ message: userMessage("msg-1") });
+  await Promise.resolve();
+
+  const running = await session.getState();
+  expect(running.isRunning).toBeTrue();
+
   await session.cancelCurrentTurn();
+  const result = await turn;
 
   const abortEvent = emitted.find((event) => event.type === "abort");
   expect(abortEvent).toBeDefined();
   expect(abortEvent?.sessionId).toBe("test-session");
-  expect((session as unknown as { running: boolean }).running).toBeFalse();
+  expect(emitted.some((event) => event.type === "done")).toBeFalse();
+  expect(result.finalState.isRunning).toBeFalse();
+  expect((await session.getState()).isRunning).toBeFalse();
 });
 
 test("cancelCurrentTurn does not emit abort when not running", async () => {
@@ -40,5 +59,5 @@ test("cancelCurrentTurn does not emit abort when not running", async () => {
 
   const abortEvent = emitted.find((event) => event.type === "abort");
   expect(abortEvent).toBeUndefined();
-  expect((session as unknown as { running: boolean }).running).toBeFalse();
+  expect((await session.getState()).isRunning).toBeFalse();
 });

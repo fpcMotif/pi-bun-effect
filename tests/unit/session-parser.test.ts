@@ -7,7 +7,7 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 function tmpSessionFile(): string {
   const root = mkdtempSync(join(tmpdir(), "pi-bun-effect-session-"));
@@ -90,6 +90,27 @@ test("session migration keeps entries and upgrades versions", async () => {
   expect(entries[0]?.id).toBe("legacy-entry");
 });
 
+test("session migration upgrades v2 headers", async () => {
+  const path = tmpSessionFile();
+  const legacyHeader = JSON.stringify({
+    version: 2,
+    id: "legacy-v2",
+    createdAt: new Date("2020-01-01T00:00:00.000Z").toISOString(),
+  });
+  const legacyEntry = JSON.stringify({
+    id: "legacy-v2-entry",
+    type: "assistant",
+    timestamp: new Date().toISOString(),
+    data: assistantMessage("legacy v2"),
+  });
+  writeFileSync(path, `${legacyHeader}\n${legacyEntry}\n`);
+
+  const store = createSessionStore();
+  expect(await store.migrate(path)).toBe(3);
+  expect(await store.readAll(path)).toHaveLength(1);
+  expect((await store.readHeader(path)).version).toBe(3);
+});
+
 test("invalid JSON lines fail with a parser error", async () => {
   const path = tmpSessionFile();
   writeFileSync(
@@ -169,4 +190,34 @@ test("parent lookup supports branch navigation", async () => {
   expect(selected?.id).toBe(child);
 
   rm(path, { force: true }).catch(() => undefined);
+});
+
+test("fork rejects missing branch parents", async () => {
+  const path = tmpSessionFile();
+  const store = createSessionStore();
+
+  await expect(store.fork(path, "missing-parent")).rejects.toThrow(
+    "branch parent not found: missing-parent",
+  );
+
+  await rm(dirname(path), { recursive: true, force: true });
+});
+
+test("tree navigation returns null or empty collections for unknown entries", async () => {
+  const path = tmpSessionFile();
+  const store = createSessionStore();
+
+  await store.append(path, {
+    id: "root",
+    type: "assistant",
+    timestamp: new Date().toISOString(),
+    data: assistantMessage("root"),
+  });
+
+  expect(await store.switch(path, "missing-entry")).toBeNull();
+  expect(await store.parent(path, "root")).toBeNull();
+  expect(await store.children(path, "missing-entry")).toEqual([]);
+  expect(await store.linearizeFrom(path, "missing-entry")).toEqual([]);
+
+  await rm(dirname(path), { recursive: true, force: true });
 });

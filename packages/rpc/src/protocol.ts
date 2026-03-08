@@ -1,31 +1,6 @@
 import type { AgentMessage, QueueBehavior } from "@pi-bun-effect/core";
 
-export type RpcCommandName =
-  | "prompt"
-  | "steer"
-  | "followUp"
-  | "follow_up"
-  | "abort"
-  | "get_state"
-  | "get_messages"
-  | "set_model"
-  | "cycle_model"
-  | "get_available_models"
-  | "set_thinking_level"
-  | "cycle_thinking_level"
-  | "set_steering_mode"
-  | "set_follow_up_mode"
-  | "compact"
-  | "set_auto_compaction"
-  | "set_auto_retry"
-  | "abort_retry"
-  | "bash"
-  | "new_session"
-  | "switch"
-  | "fork"
-  | "tree_navigation";
-
-const VALID_COMMANDS = new Set<RpcCommandName>([
+export const RPC_COMMANDS = [
   "prompt",
   "steer",
   "followUp",
@@ -49,7 +24,11 @@ const VALID_COMMANDS = new Set<RpcCommandName>([
   "switch",
   "fork",
   "tree_navigation",
-]);
+] as const;
+
+export type RpcCommandName = (typeof RPC_COMMANDS)[number];
+
+const VALID_COMMANDS = new Set<RpcCommandName>(RPC_COMMANDS);
 
 export interface RpcRequestBase {
   id: string;

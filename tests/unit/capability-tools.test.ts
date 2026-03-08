@@ -43,6 +43,18 @@ test("capability enforcement denies tool execution without matching capability",
   expect(result.content.content.at(0)?.text).toContain("cap-ok");
 });
 
+test("trust enforcement blocks bash until the extension is trusted", async () => {
+  const registry = createToolRegistry();
+  registerBuiltinTools(registry);
+
+  await expect(
+    registry.execute(makeContext(["tool:bash"], "pending"), {
+      name: "bash",
+      input: { command: "echo denied" },
+    }),
+  ).rejects.toThrow("trust denied: pending cannot use tool:bash");
+});
+
 test("capability enforcement allows all tools with full capability set", async () => {
   const registry = createToolRegistry();
   registerBuiltinTools(registry);
@@ -126,5 +138,29 @@ test("ls tool lists directory contents", async () => {
   const text = result.content.content.at(0)?.text ?? "";
   expect(text).toContain("file-a.txt");
   expect(text).toContain("file-b.txt");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("edit tool rejects empty find values", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-bun-effect-edit-"));
+  writeFileSync(join(root, "payload.txt"), "seed");
+
+  const registry = createToolRegistry();
+  registerBuiltinTools(registry);
+  const ctx = makeContext(["tool:edit"], "trusted", root);
+
+  const result = await registry.execute(ctx, {
+    name: "edit",
+    input: { path: "payload.txt", find: "", replace: "noop" },
+  });
+
+  expect(result.content.type).toBe("toolResult");
+  if (result.content.type !== "toolResult") {
+    throw new Error("expected toolResult");
+  }
+  expect(result.content.isError).toBeTrue();
+  expect(result.content.content.at(0)?.text).toContain(
+    "non-empty find value",
+  );
   rmSync(root, { recursive: true, force: true });
 });

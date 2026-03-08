@@ -1,6 +1,12 @@
 import { type AgentSession, createAgentSession } from "@pi-bun-effect/agent";
 import type { AgentMessage, QueueBehavior } from "@pi-bun-effect/core";
+import {
+  type Capability,
+  createPolicyEngine,
+  type PolicyEngine,
+} from "@pi-bun-effect/extensions";
 import { createDefaultLlmProvider, type LlmModelId } from "@pi-bun-effect/llm";
+import { RPC_COMMANDS } from "@pi-bun-effect/rpc";
 import type {
   RpcCommandName,
   RpcRequest,
@@ -25,7 +31,11 @@ interface RpcExecutionOptions {
   rootDir?: string;
   sessionStore?: SessionStore;
   toolRegistry?: ToolRegistry;
+  policyEngine?: PolicyEngine;
 }
+
+const RPC_EXTENSION_ID = "rpc";
+const IMPLEMENTED_RPC_COMMANDS = new Set<RpcCommandName>(RPC_COMMANDS);
 
 function makeId(prefix: string): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -91,16 +101,32 @@ export class RpcExecutionService {
   private readonly rootDir: string;
   private readonly sessionStore: SessionStore;
   private readonly toolRegistry: ToolRegistry;
+  private readonly policyEngine: PolicyEngine;
 
   constructor(options: RpcExecutionOptions = {}) {
     this.rootDir = options.rootDir ?? join(process.cwd(), ".pi-sessions");
     this.sessionStore = options.sessionStore ?? createSessionStore();
     this.toolRegistry = options.toolRegistry ?? createToolRegistry();
+    this.policyEngine = options.policyEngine ?? createPolicyEngine([
+      {
+        extensionId: RPC_EXTENSION_ID,
+        capabilities: ["tool:bash"],
+        allowCommands: [],
+        denyCommands: [],
+        denyPatterns: [],
+      },
+    ]);
     registerBuiltinTools(this.toolRegistry);
   }
 
   async initialize(): Promise<void> {
     await mkdir(this.rootDir, { recursive: true });
+    await this.policyEngine.setTrust(
+      RPC_EXTENSION_ID,
+      "trusted",
+      "system",
+      "builtin rpc bootstrap",
+    );
     const starter = await this.createSession(makeId("session"));
     this.activeSessionId = starter.id;
     const models = await this.provider.modelRegistry();
@@ -375,12 +401,27 @@ export class RpcExecutionService {
       ? payload.text
       : "";
 
+    if (!command) {
+      return errorResponse(request, "payload.command is required");
+    }
+
+    const mediation = await this.policyEngine.check(
+      RPC_EXTENSION_ID,
+      "tool:bash",
+      command,
+    );
+    if (!mediation.allowed) {
+      return errorResponse(request, mediation.reason ?? "bash denied");
+    }
+
+    const trust = await this.policyEngine.getTrust(RPC_EXTENSION_ID);
+
     const result = await this.toolRegistry.execute(
       {
         sessionId: session.id,
-        extensionId: "rpc",
-        trust: "trusted",
-        capabilities: new Set(["tool:bash"]),
+        extensionId: RPC_EXTENSION_ID,
+        trust: trust.decision,
+        capabilities: new Set<Capability>(["tool:bash"]),
       },
       {
         name: "bash",
@@ -432,29 +473,5 @@ export async function createRpcExecutionService(
 }
 
 export function isRpcCommandImplemented(command: RpcCommandName): boolean {
-  return new Set<RpcCommandName>([
-    "prompt",
-    "steer",
-    "followUp",
-    "follow_up",
-    "abort",
-    "get_state",
-    "get_messages",
-    "set_model",
-    "cycle_model",
-    "get_available_models",
-    "set_thinking_level",
-    "cycle_thinking_level",
-    "set_steering_mode",
-    "set_follow_up_mode",
-    "compact",
-    "set_auto_compaction",
-    "set_auto_retry",
-    "abort_retry",
-    "bash",
-    "new_session",
-    "switch",
-    "fork",
-    "tree_navigation",
-  ]).has(command);
+  return IMPLEMENTED_RPC_COMMANDS.has(command);
 }
