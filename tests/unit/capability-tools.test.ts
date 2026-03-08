@@ -12,12 +12,14 @@ import { join } from "node:path";
 function makeContext(
   capabilities: Capability[],
   trust: TrustDecision = "trusted",
+  sandboxRoot?: string,
 ): ToolContext {
   return {
     sessionId: "cap-test",
     extensionId: "ext-cap",
     capabilities: new Set(capabilities),
     trust,
+    sandboxRoot,
   };
 }
 
@@ -81,11 +83,11 @@ test("grep tool searches file contents", async () => {
 
   const registry = createToolRegistry();
   registerBuiltinTools(registry);
-  const ctx = makeContext(["tool:grep"]);
+  const ctx = makeContext(["tool:grep"], "trusted", root);
 
   const result = await registry.execute(ctx, {
     name: "grep",
-    input: { pattern: "needle", path: root },
+    input: { pattern: "needle", path: "." },
   });
   expect(result.content.content.at(0)?.text).toContain("needle");
   rmSync(root, { recursive: true, force: true });
@@ -98,11 +100,11 @@ test("find tool finds files by pattern", async () => {
 
   const registry = createToolRegistry();
   registerBuiltinTools(registry);
-  const ctx = makeContext(["tool:find"]);
+  const ctx = makeContext(["tool:find"], "trusted", root);
 
   const result = await registry.execute(ctx, {
     name: "find",
-    input: { pattern: "*.md", path: root },
+    input: { pattern: "*.md", path: "." },
   });
   expect(result.content.content.at(0)?.text).toContain("target.md");
   rmSync(root, { recursive: true, force: true });
@@ -115,11 +117,11 @@ test("ls tool lists directory contents", async () => {
 
   const registry = createToolRegistry();
   registerBuiltinTools(registry);
-  const ctx = makeContext(["tool:ls"]);
+  const ctx = makeContext(["tool:ls"], "trusted", root);
 
   const result = await registry.execute(ctx, {
     name: "ls",
-    input: { path: root },
+    input: { path: "." },
   });
   const text = result.content.content.at(0)?.text ?? "";
   expect(text).toContain("file-a.txt");
