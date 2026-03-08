@@ -65,3 +65,9 @@ test("search indexing and query returns matches", async () => {
   expect(byPath.some((entry) => entry.path.includes("agent"))).toBeTrue();
   expect(normalizeToken("  HeLLo  ")).toBe("hello");
 });
+
+test("rank returns 0 for empty index", () => {
+  const service = createSearchService();
+  const rank = service.rank("test", { fuzzy: 1, frecency: 1, git: 1 });
+  expect(rank).toBe(0);
+});
