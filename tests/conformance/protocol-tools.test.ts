@@ -221,29 +221,30 @@ test("conformance: builtin tools satisfy read/write/edit/bash contracts", async 
       "tool:bash",
     ]),
     trust,
+    sandboxRoot: root,
   };
 
   const readResult = await registry.execute(context, {
     name: "read",
-    input: { path: target },
+    input: { path: "payload.txt" },
   });
   const readText = readResult.content.content.at(0)?.text;
   expect(readText).toBe("seed");
 
   await registry.execute(context, {
     name: "write",
-    input: { path: target, text: "seeded" },
+    input: { path: "payload.txt", text: "seeded" },
   });
 
   const editedResult = await registry.execute(context, {
     name: "edit",
-    input: { path: target, find: "seeded", replace: "final" },
+    input: { path: "payload.txt", find: "seeded", replace: "final" },
   });
   expect(editedResult.content.type).toBe("toolResult");
 
   const readAfterEdit = await registry.execute(context, {
     name: "read",
-    input: { path: target },
+    input: { path: "payload.txt" },
   });
   expect(readAfterEdit.content.content.at(0)?.text).toBe("final");
 
