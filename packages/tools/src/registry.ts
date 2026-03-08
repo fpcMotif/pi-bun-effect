@@ -13,7 +13,8 @@ export interface ToolContext {
 }
 
 function isPathInsideBase(resolvedPath: string, base: string): boolean {
-  return resolvedPath === base || resolvedPath.startsWith(`${base}${sep}`);
+  const normalizedBase = base.endsWith(sep) ? base : `${base}${sep}`;
+  return resolvedPath === base || resolvedPath.startsWith(normalizedBase);
 }
 
 export async function resolveSafePath(
@@ -331,7 +332,7 @@ const GREP_TOOL: ToolDefinition = {
             toolName: "grep",
             content: [{
               type: "text",
-              text: `mock-grep:${pattern}:${resolved}`,
+              text: `mock-grep:${pattern}:${path}`,
             }],
           },
         };
@@ -393,7 +394,7 @@ const FIND_TOOL: ToolDefinition = {
             toolName: "find",
             content: [{
               type: "text",
-              text: `mock-find:${pattern}:${resolved}`,
+              text: `mock-find:${pattern}:${path}`,
             }],
           },
         };
