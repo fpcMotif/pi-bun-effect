@@ -189,24 +189,35 @@ export class JsonlSessionStore implements SessionStore {
     return (await this.readAllInternal(path)).entries;
   }
 
-  async migrate(path: string): Promise<SessionVersion> {
-    const raw = await readFile(path, "utf8");
-    const { header, entries } = readJsonl(raw);
-
-    if (header.version === 3) {
-      return 3;
+  private async migrateInternal(
+    path: string,
+    parsed: ParsedSession,
+  ): Promise<ParsedSession> {
+    if (parsed.header.version === 3) {
+      return parsed;
     }
 
     const migrated: SessionHeader = {
       version: 3,
-      id: header.id,
-      createdAt: header.createdAt,
+      id: parsed.header.id,
+      createdAt: parsed.header.createdAt,
       updatedAt: nowIso(),
     };
     const body = `${stringifyHeader(migrated)}\n${
-      entries.map(stringifyEntry).join("\n")
-    }${entries.length > 0 ? "\n" : ""}`;
+      parsed.entries.map(stringifyEntry).join("\n")
+    }${parsed.entries.length > 0 ? "\n" : ""}`;
     await writeFile(path, body, "utf8");
+
+    return {
+      header: migrated,
+      entries: parsed.entries,
+    };
+  }
+
+  async migrate(path: string): Promise<SessionVersion> {
+    const raw = await readFile(path, "utf8");
+    const parsed = readJsonl(raw);
+    await this.migrateInternal(path, parsed);
     return 3;
   }
 
@@ -277,7 +288,10 @@ export class JsonlSessionStore implements SessionStore {
     entryId: string,
   ): Promise<JsonlSessionEntry[]> {
     const entries = await this.readAllInternal(path);
-    const map = new Map(entries.entries.map((entry) => [entry.id, entry]));
+    const map = new Map<string, JsonlSessionEntry>();
+    for (const entry of entries.entries) {
+      map.set(entry.id, entry);
+    }
     const chain: JsonlSessionEntry[] = [];
     let current: JsonlSessionEntry | undefined = map.get(entryId);
 
@@ -294,8 +308,7 @@ export class JsonlSessionStore implements SessionStore {
     const raw = await readFile(path, "utf8");
     const parsed = readJsonl(raw);
     if (parsed.header.version !== 3) {
-      await this.migrate(path);
-      return this.readAllInternal(path);
+      return this.migrateInternal(path, parsed);
     }
     return parsed;
   }
