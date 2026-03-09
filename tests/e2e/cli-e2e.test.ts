@@ -46,7 +46,7 @@ test("e2e: cli usage modes boot and respond with expected startup semantics", as
 });
 
 test("e2e: cli rpc mode supports correlation-aware request/response", async () => {
-  const process = Bun.spawn({
+  const child = Bun.spawn({
     cmd: ["bun", "run", "packages/cli/src/main.ts", "--mode", "rpc"],
     stdin: "pipe",
     stdout: "pipe",
@@ -64,14 +64,14 @@ test("e2e: cli rpc mode supports correlation-aware request/response", async () =
     id: "rpc-2",
     command: "get_state",
   });
-  process.stdin?.write(`${request}\n`);
-  process.stdin?.write(`${query}\n`);
-  process.stdin?.end();
+  child.stdin?.write(`${request}\n`);
+  child.stdin?.write(`${query}\n`);
+  child.stdin?.end();
 
   const [stdoutText, stderrText, exitCode] = await Promise.all([
-    new Response(process.stdout).text(),
-    new Response(process.stderr).text(),
-    process.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
   ]);
 
   const lines = stdoutText.split(/\r?\n/).filter(Boolean);
@@ -99,4 +99,33 @@ test("e2e: cli rpc mode supports correlation-aware request/response", async () =
   expect(state?.command).toBe("get_state");
   expect(exitCode).toBe(0);
   expect(stderrText).toBe("");
+});
+
+test("e2e: interactive mode supports slash command help and @ file autocomplete", async () => {
+  const child = Bun.spawn({
+    cmd: ["bun", "run", "packages/cli/src/main.ts", "--mode", "interactive"],
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+    cwd: process.cwd(),
+  });
+
+  child.stdin?.write("/help\n");
+  child.stdin?.write("please inspect @packages/cli/src\n");
+  child.stdin?.write("/exit\n");
+  child.stdin?.end();
+
+  const [stdoutText, stderrText, exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+
+  expect(exitCode).toBe(0);
+  expect(stderrText).toBe("");
+  expect(stdoutText).toContain("commands: /help, /exit, /files <query>");
+  expect(stdoutText).toContain("assistant> echo: please inspect @packages/cli/src");
+  expect(stdoutText).toContain("file suggestions (packages/cli/src)");
+  expect(stdoutText).toContain("packages/cli/src/index.ts");
+  expect(stdoutText).toContain("bye");
 });

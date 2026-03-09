@@ -4,6 +4,7 @@ import {
   type RpcRequest,
   type RpcResponse,
 } from "@pi-bun-effect/rpc";
+import { createTuiSession } from "@pi-bun-effect/tui";
 
 export interface CliCommand {
   name: string;
@@ -151,8 +152,8 @@ export async function runCli(
   }
 
   if (parsed.mode === "interactive" && parsed.prompt === undefined) {
-    console.log("pi-bun-effect interactive mode");
-    console.log("stdin: interactive loop not yet implemented in bootstrap");
+    const session = createTuiSession();
+    await session.mount();
     return 0;
   }
 
