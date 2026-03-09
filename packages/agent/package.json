@@ -8,6 +8,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@pi-bun-effect/core": "workspace:*"
+    "@pi-bun-effect/core": "workspace:*",
+    "@pi-bun-effect/llm": "workspace:*",
+    "@pi-bun-effect/tools": "workspace:*"
   }
 }

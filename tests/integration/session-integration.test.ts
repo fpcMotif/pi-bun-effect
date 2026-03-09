@@ -1,8 +1,9 @@
-import { createAgentSession } from "@pi-bun-effect/agent";
+import { createAgentSession, InMemoryAgentSession } from "@pi-bun-effect/agent";
 import type { AgentMessage } from "@pi-bun-effect/core";
 import { createMockLlmProvider } from "@pi-bun-effect/llm";
 import type { LlmModelId } from "@pi-bun-effect/llm";
 import { createSessionStore } from "@pi-bun-effect/session";
+import { createToolRegistry } from "@pi-bun-effect/tools";
 import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -72,6 +73,137 @@ test("integration: fake llm stream emits deterministic event order", async () =>
   expect(JSON.parse(payloads[3]!).name).toBe("read");
 });
 
+test("integration: session tool call is executed and generation continues", async () => {
+  const toolRegistry = createToolRegistry();
+  toolRegistry.register({
+    name: "echo",
+    description: "echoes text",
+    async run(_context, invocation) {
+      return {
+        content: {
+          type: "toolResult",
+          role: "tool",
+          id: "tool-result-1",
+          parentId: undefined,
+          timestamp: new Date().toISOString(),
+          toolCallId: "call-static",
+          toolName: "echo",
+          content: [
+            {
+              type: "text",
+              text: String(invocation.input.text ?? ""),
+            },
+          ],
+        },
+      };
+    },
+  });
+
+  let streamCallCount = 0;
+  const llmProvider = createMockLlmProvider([]);
+  llmProvider.stream = () => {
+    streamCallCount += 1;
+    async function* emitter() {
+      if (streamCallCount === 1) {
+        yield { type: "start", payload: "" };
+        yield { type: "text_delta", payload: "thinking" };
+        yield { type: "toolcall_start", payload: "call-1" };
+        yield {
+          type: "toolcall_delta",
+          payload: JSON.stringify({ name: "echo", input: { text: "ok" } }),
+        };
+        yield {
+          type: "toolcall_end",
+          payload: JSON.stringify({ name: "echo", input: { text: "ok" } }),
+        };
+        yield { type: "done", payload: "" };
+        return;
+      }
+      yield { type: "start", payload: "" };
+      yield { type: "text_delta", payload: "final" };
+      yield { type: "done", payload: "" };
+    }
+
+    return {
+      stream: emitter(),
+    };
+  };
+
+  const session = new InMemoryAgentSession(
+    {
+      sessionId: "integration-tools",
+      contextWindowTokens: 4096,
+      reserveTokens: 128,
+      autoCompaction: false,
+    },
+    {
+      llmProvider,
+      toolRegistry,
+      model: { provider: "openai", modelId: "gpt-4o-mini" },
+    },
+  );
+
+  const types: string[] = [];
+  session.onEvent((event) => {
+    types.push(event.type);
+  });
+
+  const result = await session.prompt({ message: userMessage("u-tools", "call") });
+
+  expect(streamCallCount).toBe(2);
+  expect(types).toContain("toolcall_start");
+  expect(types).toContain("toolcall_end");
+  expect(result.events.at(-1)?.type).toBe("done");
+});
+
+test("integration: compact preserves tool boundaries and writes metadata", async () => {
+  const llmProvider = createMockLlmProvider([
+    { type: "start", payload: "" },
+    { type: "text_delta", payload: "assistant-1" },
+    { type: "done", payload: "" },
+  ]);
+
+  const session = new InMemoryAgentSession(
+    {
+      sessionId: "integration-compact",
+      contextWindowTokens: 4096,
+      reserveTokens: 128,
+      autoCompaction: false,
+    },
+    { llmProvider },
+  );
+
+  const internals = session as unknown as { messages: AgentMessage[] };
+  internals.messages.push(
+    assistantMessage("a1", "a1"),
+    {
+      type: "toolResult",
+      role: "tool",
+      id: "t1",
+      parentId: "a1",
+      timestamp: new Date().toISOString(),
+      toolCallId: "call-a1",
+      toolName: "echo",
+      content: [{ type: "text", text: "tool" }],
+    },
+    userMessage("u2", "u2"),
+    assistantMessage("a2", "a2"),
+  );
+
+  await session.compact();
+
+  const summary = internals.messages[0];
+  expect(summary?.type).toBe("compactionSummary");
+  expect(summary?.content[0]?.text).toContain("compactionRun");
+
+  const hasDanglingTool = internals.messages.some((message, index, all) => {
+    if (message.type !== "toolResult") return false;
+    return !all.slice(0, index).some((candidate) => candidate.id === message.parentId);
+  });
+
+  expect(hasDanglingTool).toBeFalse();
+});
+
 test("integration: session state, branching, and queue consistency", async () => {
   const root = mkdtempSync(join(tmpdir(), "pi-bun-effect-integration-"));
   const path = join(root, "session.jsonl");
@@ -109,14 +241,10 @@ test("integration: session state, branching, and queue consistency", async () =>
     events.push(event.type);
   });
 
-  await session.requestQueue({
-    queue: "followUp",
-    content: "pre-queued turn",
-  });
-  const steerTurn = await session.steer({
-    message: userMessage("q1", "steer"),
-  });
-  await session.prompt({ message: userMessage("q2", "ask again") });
+  const steerPromise = session.steer({ message: userMessage("q1", "steer") });
+  const followUpPromise = session.followUp({ message: userMessage("q2", "follow") });
+  const steerTurn = await steerPromise;
+  await followUpPromise;
   const state = await session.getState();
 
   unsubscribe();
