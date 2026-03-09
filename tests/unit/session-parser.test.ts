@@ -64,6 +64,40 @@ test("session parser reads v3 header and message entries", async () => {
   expect(entries[1]?.parentId).toBe("m1");
 });
 
+
+test("session parser preserves image attachment blocks across append/read", async () => {
+  const path = tmpSessionFile();
+  const store = createSessionStore();
+
+  await store.append(path, {
+    id: "img-entry",
+    type: "user",
+    timestamp: new Date().toISOString(),
+    data: {
+      type: "user",
+      role: "user",
+      id: "img-message",
+      timestamp: new Date().toISOString(),
+      content: [
+        { type: "text", text: "what's in this image?" },
+        {
+          type: "image",
+          mimeType: "image/png",
+          data: "iVBORw0KGgoAAAANSUhEUgAAAAUA",
+        },
+      ],
+    },
+  });
+
+  const [saved] = await store.readAll(path);
+  expect(saved?.id).toBe("img-entry");
+  expect(saved?.data.content[1]).toEqual({
+    type: "image",
+    mimeType: "image/png",
+    data: "iVBORw0KGgoAAAANSUhEUgAAAAUA",
+  });
+});
+
 test("session migration keeps entries and upgrades versions", async () => {
   const path = tmpSessionFile();
   const legacyHeader = JSON.stringify({

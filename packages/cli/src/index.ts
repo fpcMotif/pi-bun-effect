@@ -1,9 +1,11 @@
 import {
   createRpcProtocol,
   type RpcEvent,
+  type RpcPayloads,
   type RpcRequest,
   type RpcResponse,
 } from "@pi-bun-effect/rpc";
+import type { AgentMessage, ContentBlock } from "@pi-bun-effect/core";
 
 export interface CliCommand {
   name: string;
@@ -173,9 +175,7 @@ async function handleRpcCommand(
   turn: number,
 ): Promise<RpcResponse> {
   if (request.command === "prompt") {
-    const prompt = (
-      request.payload as { message?: { content?: unknown[] } } | undefined
-    )?.message;
+    const prompt = extractPromptMessage(request.payload);
     const payload = { sessionId, received: prompt ?? null, turn };
     const event = makeTurnEvent(
       sessionId,
@@ -240,6 +240,56 @@ async function handleRpcCommand(
     status: "error",
     error: `unsupported command: ${request.command}`,
   };
+}
+
+function extractPromptMessage(payload: RpcPayloads): AgentMessage | null {
+  const candidate = (payload as { message?: AgentMessage } | undefined)?.message;
+  if (!candidate || !Array.isArray(candidate.content)) {
+    return null;
+  }
+
+  const content = normalizeCliBlocks(candidate.content);
+  if (!content) {
+    return null;
+  }
+
+  return {
+    ...candidate,
+    content,
+  };
+}
+
+function normalizeCliBlocks(content: unknown[]): ContentBlock[] | null {
+  const blocks: ContentBlock[] = [];
+  for (const block of content) {
+    if (typeof block === "string") {
+      blocks.push({ type: "text", text: block });
+      continue;
+    }
+
+    if (!block || typeof block !== "object") {
+      return null;
+    }
+    const typed = block as Partial<ContentBlock>;
+    if (typed.type === "text" && typeof typed.text === "string") {
+      blocks.push({ type: "text", text: typed.text });
+      continue;
+    }
+    if (
+      typed.type === "image"
+      && typeof typed.data === "string"
+      && typeof typed.mimeType === "string"
+    ) {
+      blocks.push({ type: "image", data: typed.data, mimeType: typed.mimeType });
+      continue;
+    }
+    if (typed.type === "thinking" || typed.type === "toolCall") {
+      blocks.push({ type: typed.type, text: typed.text });
+      continue;
+    }
+    return null;
+  }
+  return blocks;
 }
 
 export function listCliCommands(): CliCommand[] {

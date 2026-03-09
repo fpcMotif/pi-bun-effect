@@ -1,4 +1,9 @@
-import type { AgentMessage, QueueBehavior } from "@pi-bun-effect/core";
+import {
+  type AgentMessage,
+  type ContentBlock,
+  isAgentMessage,
+  type QueueBehavior,
+} from "@pi-bun-effect/core";
 
 export type RpcCommandName =
   | "prompt"
@@ -129,10 +134,18 @@ export class JsonRpcProtocol implements RpcProtocol {
       return null;
     }
 
+    const payload = this.parsePayload(
+      command as RpcCommandName,
+      (parsed as { payload?: unknown }).payload,
+    );
+    if (payload === null) {
+      return null;
+    }
+
     return {
       id,
       command: command as RpcCommandName,
-      payload: (parsed as { payload?: RpcPayloads }).payload,
+      payload,
     };
   }
 
@@ -143,10 +156,86 @@ export class JsonRpcProtocol implements RpcProtocol {
   encodeEvent(event: RpcEvent): string {
     return JSON.stringify(event);
   }
+
+  private parsePayload(
+    command: RpcCommandName,
+    payload: unknown,
+  ): RpcPayloads | null {
+    if (command !== "prompt") {
+      return payload as RpcPayloads;
+    }
+
+    if (!isObject(payload)) {
+      return null;
+    }
+
+    const message = payload.message;
+    if (!isAgentMessage(message)) {
+      return null;
+    }
+
+    const normalized = normalizeContentBlocks(message.content);
+    if (!normalized) {
+      return null;
+    }
+
+    return {
+      ...(payload as PromptPayload),
+      message: {
+        ...message,
+        content: normalized,
+      },
+    };
+  }
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function normalizeContentBlocks(blocks: unknown): ContentBlock[] | null {
+  if (!Array.isArray(blocks)) {
+    return null;
+  }
+
+  const normalized: ContentBlock[] = [];
+  for (const block of blocks) {
+    if (typeof block === "string") {
+      normalized.push({ type: "text", text: block });
+      continue;
+    }
+    if (!isObject(block) || typeof block.type !== "string") {
+      return null;
+    }
+
+    if (block.type === "text") {
+      if (typeof block.text !== "string") {
+        return null;
+      }
+      normalized.push({ type: "text", text: block.text });
+      continue;
+    }
+
+    if (block.type === "image") {
+      if (typeof block.data !== "string" || typeof block.mimeType !== "string") {
+        return null;
+      }
+      normalized.push({ type: "image", data: block.data, mimeType: block.mimeType });
+      continue;
+    }
+
+    if (block.type === "thinking" || block.type === "toolCall") {
+      normalized.push({
+        type: block.type,
+        text: typeof block.text === "string" ? block.text : undefined,
+      });
+      continue;
+    }
+
+    return null;
+  }
+
+  return normalized;
 }
 
 export function createRpcProtocol(): RpcProtocol {

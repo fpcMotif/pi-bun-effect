@@ -45,6 +45,51 @@ test("e2e: cli usage modes boot and respond with expected startup semantics", as
   expect(jsonPayload).toHaveProperty("prompt", "ping");
 });
 
+
+test("e2e: cli rpc prompt accepts typed image content blocks", async () => {
+  const process = Bun.spawn({
+    cmd: ["bun", "run", "packages/cli/src/main.ts", "--mode", "rpc"],
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  process.stdin?.write(
+    `${JSON.stringify({
+      id: "rpc-image",
+      command: "prompt",
+      payload: {
+        message: {
+          ...userMessage("img"),
+          content: [
+            { type: "text", text: "inspect attachment" },
+            {
+              type: "image",
+              mimeType: "image/png",
+              data: "iVBORw0KGgoAAAANSUhEUgAAAAUA",
+            },
+          ],
+        },
+      },
+    })}
+`,
+  );
+  process.stdin?.end();
+
+  const stdoutText = await new Response(process.stdout).text();
+  const payloads = stdoutText
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as { id?: string; result?: { received?: AgentMessage } });
+
+  const response = payloads.find((item) => item.id === "rpc-image");
+  expect(response?.result?.received?.content[1]).toEqual({
+    type: "image",
+    mimeType: "image/png",
+    data: "iVBORw0KGgoAAAANSUhEUgAAAAUA",
+  });
+});
+
 test("e2e: cli rpc mode supports correlation-aware request/response", async () => {
   const process = Bun.spawn({
     cmd: ["bun", "run", "packages/cli/src/main.ts", "--mode", "rpc"],

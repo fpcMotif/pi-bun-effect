@@ -133,6 +133,39 @@ function readJsonl(text: string): ParsedSession {
   return { header, entries };
 }
 
+
+function normalizeMessage(message: AgentMessage): AgentMessage {
+  const normalizedContent = message.content.map((block) => {
+    if (block.type === "text") {
+      if (typeof block.text !== "string") {
+        throw new Error("Invalid text content block");
+      }
+      return { type: "text", text: block.text };
+    }
+
+    if (block.type === "image") {
+      if (typeof block.data !== "string" || typeof block.mimeType !== "string") {
+        throw new Error("Invalid image content block");
+      }
+      return { type: "image", data: block.data, mimeType: block.mimeType };
+    }
+
+    if (block.type === "thinking" || block.type === "toolCall") {
+      return {
+        type: block.type,
+        text: typeof block.text === "string" ? block.text : undefined,
+      };
+    }
+
+    throw new Error("Unsupported content block type");
+  });
+
+  return {
+    ...message,
+    content: normalizedContent,
+  };
+}
+
 function stringifyHeader(header: SessionHeader): string {
   return JSON.stringify(header);
 }
@@ -172,6 +205,7 @@ export class JsonlSessionStore implements SessionStore {
     await this.open(path);
     const prepared = {
       ...entry,
+      data: normalizeMessage(entry.data),
       id: entry.id ?? makeId(),
       timestamp: entry.timestamp ?? nowIso(),
     };

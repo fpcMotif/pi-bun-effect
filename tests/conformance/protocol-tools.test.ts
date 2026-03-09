@@ -41,6 +41,54 @@ test("conformance: rpc protocol preserves command ids and payload shapes", () =>
     .toBeDefined();
 });
 
+
+test("conformance: rpc prompt payload supports image content blocks", () => {
+  const raw = JSON.stringify({
+    id: "rpc-img-1",
+    command: "prompt",
+    payload: {
+      message: {
+        type: "user",
+        role: "user",
+        id: "img-1",
+        timestamp: new Date().toISOString(),
+        content: [
+          { type: "text", text: "describe this" },
+          {
+            type: "image",
+            mimeType: "image/png",
+            data: "iVBORw0KGgoAAAANSUhEUgAAAAUA",
+          },
+        ],
+      },
+    },
+  });
+
+  const parsed = protocol.parseLine(raw) as RpcRequest;
+  expect(parsed).toBeDefined();
+  const content = (parsed.payload as { message: AgentMessage }).message.content;
+  expect(content[1]).toEqual({
+    type: "image",
+    mimeType: "image/png",
+    data: "iVBORw0KGgoAAAANSUhEUgAAAAUA",
+  });
+
+  expect(
+    protocol.parseLine(
+      JSON.stringify({
+        id: "rpc-img-invalid",
+        command: "prompt",
+        payload: {
+          message: {
+            ...userMessage("bad-image"),
+            content: [{ type: "image", data: "only-base64" }],
+          },
+        },
+      }),
+    ),
+  ).toBeNull();
+});
+
 test("conformance: rpc protocol rejects malformed and unknown commands", () => {
   expect(protocol.parseLine("{invalid")).toBeNull();
   expect(protocol.parseLine("{\"id\":\"x\",\"command\":\"unknown\"}"))
