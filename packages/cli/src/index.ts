@@ -3,6 +3,7 @@ import {
   type RpcEvent,
   type RpcRequest,
   type RpcResponse,
+  type SandboxMode,
 } from "@pi-bun-effect/rpc";
 
 export interface CliCommand {
@@ -25,6 +26,7 @@ interface CliArgs {
   mode: string;
   prompt?: string;
   stream?: boolean;
+  sandboxMode: SandboxMode;
   help: boolean;
   version: boolean;
   invalidCommand: boolean;
@@ -34,6 +36,7 @@ function parseArgs(argv: string[]): CliArgs {
   const args = [...argv];
   const result: CliArgs = {
     mode: "interactive",
+    sandboxMode: "local",
     help: false,
     version: false,
     invalidCommand: false,
@@ -51,6 +54,16 @@ function parseArgs(argv: string[]): CliArgs {
       const mode = args.shift();
       if (mode) {
         result.mode = mode;
+      }
+    } else if (arg === "--sandbox-mode") {
+      const sandboxMode = args.shift();
+      if (
+        sandboxMode === "local" || sandboxMode === "subprocess-isolated"
+        || sandboxMode === "containerized"
+      ) {
+        result.sandboxMode = sandboxMode;
+      } else {
+        result.invalidCommand = true;
       }
     } else if (arg === "--prompt" || arg === "-p") {
       result.prompt = args.shift();
@@ -71,8 +84,8 @@ function printUsage(): void {
 
 Usage:
   pi-bun-effect --version
-  pi-bun-effect --mode json --prompt "text"
-  pi-bun-effect --mode rpc
+  pi-bun-effect --mode json --prompt "text" [--sandbox-mode local|subprocess-isolated|containerized]
+  pi-bun-effect --mode rpc [--sandbox-mode local|subprocess-isolated|containerized]
 
 Notes:
   --mode rpc starts a line-delimited JSON protocol loop.
@@ -124,6 +137,7 @@ export async function runCli(
       at: new Date().toISOString(),
       prompt: parsed.prompt ?? "",
       stream: parsed.stream === true,
+      sandboxMode: parsed.sandboxMode,
     };
     console.log(formatEvent(payload));
     return 0;
@@ -139,7 +153,13 @@ export async function runCli(
       if (!request) {
         continue;
       }
-      const response = await handleRpcCommand(protocol, request, sessionId, 0);
+      const response = await handleRpcCommand(
+        protocol,
+        request,
+        sessionId,
+        0,
+        parsed.sandboxMode,
+      );
       if (response) {
         console.log(protocol.encodeResponse(response));
         if (request.command === "abort") {
@@ -161,6 +181,7 @@ export async function runCli(
     at: new Date().toISOString(),
     mode: parsed.mode,
     prompt: parsed.prompt ?? "",
+    sandboxMode: parsed.sandboxMode,
   };
   console.log(formatEvent(fallback));
   return 0;
@@ -171,12 +192,13 @@ async function handleRpcCommand(
   request: RpcRequest,
   sessionId: string,
   turn: number,
+  sandboxMode: SandboxMode,
 ): Promise<RpcResponse> {
   if (request.command === "prompt") {
     const prompt = (
       request.payload as { message?: { content?: unknown[] } } | undefined
     )?.message;
-    const payload = { sessionId, received: prompt ?? null, turn };
+    const payload = { sessionId, received: prompt ?? null, turn, sandboxMode };
     const event = makeTurnEvent(
       sessionId,
       `${turn}`,
@@ -189,6 +211,23 @@ async function handleRpcCommand(
       command: request.command,
       status: "ok",
       result: payload,
+    };
+  }
+
+  if (request.command === "bash") {
+    const payload = request.payload as {
+      command?: string;
+      sandboxMode?: SandboxMode;
+    };
+    return {
+      id: request.id,
+      command: request.command,
+      status: "ok",
+      result: {
+        sessionId,
+        accepted: Boolean(payload?.command),
+        sandboxMode: payload?.sandboxMode ?? sandboxMode,
+      },
     };
   }
 
@@ -218,6 +257,7 @@ async function handleRpcCommand(
         sessionId,
         busy: false,
         queued: 0,
+        sandboxMode,
       },
     };
   }

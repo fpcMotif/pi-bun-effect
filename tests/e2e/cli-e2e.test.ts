@@ -43,6 +43,7 @@ test("e2e: cli usage modes boot and respond with expected startup semantics", as
   const jsonPayload = JSON.parse(json.output.at(-1) ?? "{}");
   expect(jsonPayload).toHaveProperty("type", "json_response");
   expect(jsonPayload).toHaveProperty("prompt", "ping");
+  expect(jsonPayload).toHaveProperty("sandboxMode", "local");
 });
 
 test("e2e: cli rpc mode supports correlation-aware request/response", async () => {
@@ -97,6 +98,49 @@ test("e2e: cli rpc mode supports correlation-aware request/response", async () =
   expect(prompt?.status).toBe("ok");
   expect(prompt?.command).toBe("prompt");
   expect(state?.command).toBe("get_state");
+  expect(exitCode).toBe(0);
+  expect(stderrText).toBe("");
+});
+
+
+test("e2e: cli rpc mode accepts sandbox mode override for bash command", async () => {
+  const process = Bun.spawn({
+    cmd: [
+      "bun",
+      "run",
+      "packages/cli/src/main.ts",
+      "--mode",
+      "rpc",
+      "--sandbox-mode",
+      "containerized",
+    ],
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const request = JSON.stringify({
+    id: "rpc-bash-1",
+    command: "bash",
+    payload: { command: "echo hi", sandboxMode: "subprocess-isolated" },
+  });
+  process.stdin?.write(`${request}\n`);
+  process.stdin?.end();
+
+  const [stdoutText, stderrText, exitCode] = await Promise.all([
+    new Response(process.stdout).text(),
+    new Response(process.stderr).text(),
+    process.exited,
+  ]);
+
+  const response = stdoutText
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as { id?: string; result?: { sandboxMode?: string } })
+    .find((line) => line.id === "rpc-bash-1");
+
+  expect(response).toBeDefined();
+  expect(response?.result?.sandboxMode).toBe("subprocess-isolated");
   expect(exitCode).toBe(0);
   expect(stderrText).toBe("");
 });

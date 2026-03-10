@@ -1,6 +1,16 @@
 import type { AgentMessage } from "@pi-bun-effect/core";
-import type { Capability, TrustDecision } from "@pi-bun-effect/extensions";
+import {
+  createPolicyEngine,
+  type Capability,
+  type PolicyEngine,
+  type TrustDecision,
+} from "@pi-bun-effect/extensions";
 import { randomUUID } from "node:crypto";
+import {
+  createExecutionBackend,
+  type ExecutionBackend,
+  type SandboxMode,
+} from "./execution-backend";
 
 export interface ToolContext {
   sessionId: string;
@@ -43,6 +53,12 @@ export interface BuiltinTools {
   registerWriteTool(registry: ToolRegistry): void;
   registerEditTool(registry: ToolRegistry): void;
   registerBashTool(registry: ToolRegistry): void;
+}
+
+export interface ToolRuntimeOptions {
+  sandboxMode?: SandboxMode;
+  executionBackend?: ExecutionBackend;
+  policyEngine?: PolicyEngine;
 }
 
 const READ_TOOL: ToolDefinition = {
@@ -141,12 +157,67 @@ const EDIT_TOOL: ToolDefinition = {
   },
 };
 
-const BASH_TOOL: ToolDefinition = {
-  name: "bash",
-  description: "Safe-mode mock command runner",
-  async run(_context, invocation) {
-    const command = String(invocation.input.command ?? "");
-    if (!command) {
+function makeToolResult(
+  toolName: string,
+  text: string,
+  isError = false,
+): ToolOutput {
+  return {
+    content: {
+      type: "toolResult",
+      role: "tool",
+      id: randomUUID(),
+      parentId: undefined,
+      timestamp: new Date().toISOString(),
+      toolCallId: `tool-${randomUUID()}`,
+      toolName,
+      isError,
+      content: [{ type: "text", text }],
+    },
+  };
+}
+
+function createBashTool(options: Required<ToolRuntimeOptions>): ToolDefinition {
+  return {
+    name: "bash",
+    description: "Safe-mode command runner with policy mediation",
+    async run(context, invocation) {
+      const command = String(invocation.input.command ?? "").trim();
+      if (!command) {
+        return makeToolResult("bash", "no command provided", true);
+      }
+
+      if (!context.capabilities.has("tool:bash")) {
+        return makeToolResult("bash", "bash capability missing", true);
+      }
+
+      if (!context.capabilities.has("exec:spawn")) {
+        return makeToolResult("bash", "exec:spawn capability missing", true);
+      }
+
+      if (context.trust !== "trusted") {
+        return makeToolResult(
+          "bash",
+          `blocked by trust policy: extension trust is ${context.trust}`,
+          true,
+        );
+      }
+
+      const mediation = await options.policyEngine.check(
+        context.extensionId,
+        "exec:spawn",
+        command,
+      );
+
+      if (!mediation.allowed) {
+        return makeToolResult(
+          "bash",
+          `blocked by policy: ${mediation.reason ?? "command denied"}`,
+          true,
+        );
+      }
+
+      const result = await options.executionBackend.execute({ command });
       return {
         content: {
           type: "toolResult",
@@ -156,63 +227,22 @@ const BASH_TOOL: ToolDefinition = {
           timestamp: new Date().toISOString(),
           toolCallId: `tool-${randomUUID()}`,
           toolName: "bash",
-          isError: true,
+          isError: result.exitCode !== 0,
           content: [
             {
               type: "text",
-              text: "no command provided",
+              text: result.stdout || result.stderr || `exit=${result.exitCode}`,
             },
           ],
         },
-      };
-    }
-
-    if (typeof Bun === "undefined") {
-      return {
-        content: {
-          type: "toolResult",
-          role: "tool",
-          id: randomUUID(),
-          parentId: undefined,
-          timestamp: new Date().toISOString(),
-          toolCallId: `tool-${randomUUID()}`,
-          toolName: "bash",
-          content: [
-            {
-              type: "text",
-              text: `mock-run:${command}`,
-            },
-          ],
+        debug: {
+          exitCode: result.exitCode,
+          sandboxMode: result.mode,
         },
       };
-    }
-
-    const process = Bun.spawnSync(["sh", "-c", command]);
-    const output = process.stdout.toString();
-    const error = process.stderr.toString();
-    return {
-      content: {
-        type: "toolResult",
-        role: "tool",
-        id: randomUUID(),
-        parentId: undefined,
-        timestamp: new Date().toISOString(),
-        toolCallId: `tool-${randomUUID()}`,
-        toolName: "bash",
-        isError: process.exitCode !== 0,
-        content: [
-          {
-            type: "text",
-            text: output || error || `exit=${process.exitCode}`,
-          },
-        ],
-      },
-      debug: {
-        exitCode: process.exitCode,
-      },
-    };
-  },
-};
+    },
+  };
+}
 
 export class InMemoryToolRegistry implements ToolRegistry {
   private readonly definitions = new Map<string, ToolDefinition>();
@@ -246,6 +276,15 @@ export class InMemoryToolRegistry implements ToolRegistry {
   }
 }
 
+function resolveRuntimeOptions(options: ToolRuntimeOptions = {}): Required<ToolRuntimeOptions> {
+  const sandboxMode = options.sandboxMode ?? "local";
+  return {
+    sandboxMode,
+    executionBackend: options.executionBackend ?? createExecutionBackend(sandboxMode),
+    policyEngine: options.policyEngine ?? createPolicyEngine(),
+  };
+}
+
 export const builtinTools: BuiltinTools = {
   registerReadTool(registry) {
     registry.register(READ_TOOL);
@@ -257,7 +296,8 @@ export const builtinTools: BuiltinTools = {
     registry.register(EDIT_TOOL);
   },
   registerBashTool(registry) {
-    registry.register(BASH_TOOL);
+    const runtime = resolveRuntimeOptions();
+    registry.register(createBashTool(runtime));
   },
 };
 
@@ -266,9 +306,13 @@ export function createToolRegistry(): ToolRegistry {
   return registry;
 }
 
-export function registerBuiltinTools(registry: ToolRegistry): void {
+export function registerBuiltinTools(
+  registry: ToolRegistry,
+  options: ToolRuntimeOptions = {},
+): void {
+  const runtime = resolveRuntimeOptions(options);
   builtinTools.registerReadTool(registry);
   builtinTools.registerWriteTool(registry);
   builtinTools.registerEditTool(registry);
-  builtinTools.registerBashTool(registry);
+  registry.register(createBashTool(runtime));
 }

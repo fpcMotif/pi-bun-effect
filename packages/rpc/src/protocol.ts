@@ -67,9 +67,17 @@ export interface SetModelPayload {
   modelId: string;
 }
 
+export type SandboxMode = "local" | "subprocess-isolated" | "containerized";
+
+export interface BashPayload {
+  command: string;
+  sandboxMode?: SandboxMode;
+}
+
 export type RpcPayloads =
   | PromptPayload
   | SetModelPayload
+  | BashPayload
   | { sessionId: string }
   | { text: string }
   | Record<string, unknown>

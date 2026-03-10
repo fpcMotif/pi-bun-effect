@@ -1,5 +1,9 @@
 import type { AgentMessage } from "@pi-bun-effect/core";
-import type { Capability, TrustDecision } from "@pi-bun-effect/extensions";
+import {
+  createPolicyEngine,
+  type Capability,
+  type TrustDecision,
+} from "@pi-bun-effect/extensions";
 import type { RpcPayloads, RpcRequest } from "@pi-bun-effect/rpc";
 import { createRpcProtocol } from "@pi-bun-effect/rpc";
 import { createToolRegistry, registerBuiltinTools } from "@pi-bun-effect/tools";
@@ -56,7 +60,16 @@ test("conformance: builtin tools satisfy read/write/edit/bash contracts", async 
   writeFileSync(target, "seed");
 
   const registry = createToolRegistry();
-  registerBuiltinTools(registry);
+  registerBuiltinTools(registry, {
+    sandboxMode: "local",
+    policyEngine: createPolicyEngine([{
+      extensionId: "ext-conformance",
+      capabilities: ["exec:spawn" as Capability],
+      allowCommands: [],
+      denyCommands: [],
+      denyPatterns: [],
+    }]),
+  });
 
   const trust: TrustDecision = "trusted";
 
@@ -68,6 +81,7 @@ test("conformance: builtin tools satisfy read/write/edit/bash contracts", async 
       "tool:write",
       "tool:edit",
       "tool:bash",
+      "exec:spawn",
     ]),
     trust,
   };
