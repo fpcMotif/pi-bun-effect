@@ -1,6 +1,6 @@
 import type { AgentMessage } from "@pi-bun-effect/core";
 import type { Capability, TrustDecision } from "@pi-bun-effect/extensions";
-import type { RpcPayloads, RpcRequest } from "@pi-bun-effect/rpc";
+import type { RpcCommandName, RpcPayloads, RpcRequest, RpcResponse } from "@pi-bun-effect/rpc";
 import { createRpcProtocol } from "@pi-bun-effect/rpc";
 import { createToolRegistry, registerBuiltinTools } from "@pi-bun-effect/tools";
 import type { ToolContext } from "@pi-bun-effect/tools";
@@ -39,6 +39,66 @@ test("conformance: rpc protocol preserves command ids and payload shapes", () =>
   expect(request.payload).toBeDefined();
   expect((request.payload as { message?: unknown } | undefined)?.message)
     .toBeDefined();
+});
+
+test("conformance: rpc protocol parses all required command names", () => {
+  const commands: RpcCommandName[] = [
+    "prompt",
+    "steer",
+    "followUp",
+    "follow_up",
+    "abort",
+    "get_state",
+    "get_messages",
+    "set_model",
+    "cycle_model",
+    "get_available_models",
+    "set_thinking_level",
+    "cycle_thinking_level",
+    "set_steering_mode",
+    "set_follow_up_mode",
+    "compact",
+    "set_auto_compaction",
+    "set_auto_retry",
+    "abort_retry",
+    "bash",
+    "new_session",
+    "switch",
+    "fork",
+    "tree_navigation",
+  ];
+
+  commands.forEach((command) => {
+    const parsed = protocol.parseLine(
+      JSON.stringify({ id: `rpc-${command}`, command, payload: {} }),
+    );
+    expect(parsed).not.toBeNull();
+    expect(parsed?.id).toBe(`rpc-${command}`);
+    expect(parsed?.command).toBe(command);
+  });
+});
+
+test("conformance: rpc protocol keeps correlation ids when encoding responses", () => {
+  const response: RpcResponse = {
+    id: "rpc-corr-2",
+    command: "set_auto_retry",
+    status: "error",
+    error: "invalid_payload",
+    result: {
+      error: {
+        code: "invalid_payload",
+        correlationId: "rpc-corr-2",
+      },
+    },
+  };
+
+  const encoded = protocol.encodeResponse(response);
+  const decoded = JSON.parse(encoded) as RpcResponse & {
+    result?: { error?: { correlationId?: string } };
+  };
+
+  expect(decoded.id).toBe("rpc-corr-2");
+  expect(decoded.result?.error?.correlationId).toBe("rpc-corr-2");
 });
 
 test("conformance: rpc protocol rejects malformed and unknown commands", () => {
