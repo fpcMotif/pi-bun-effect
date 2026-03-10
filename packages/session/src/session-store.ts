@@ -1,4 +1,4 @@
-import { type AgentMessage, isAgentMessage } from "@pi-bun-effect/core";
+import { type AgentMessage, isAgentMessage } from "../../core/src/contracts";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
