@@ -170,3 +170,30 @@ test("parent lookup supports branch navigation", async () => {
 
   rm(path, { force: true }).catch(() => undefined);
 });
+
+
+test("session store persists compaction and branch summary entries", async () => {
+  const path = tmpSessionFile();
+  const store = createSessionStore();
+  const root = await store.append(path, {
+    id: "root",
+    type: "assistant",
+    timestamp: new Date().toISOString(),
+    data: assistantMessage("root"),
+  });
+
+  await store.appendCompactionSummary(path, {
+    id: "summary-1",
+    parentId: root.id,
+    text: "Compacted old context.",
+  });
+  await store.appendBranchSummary(path, {
+    id: "summary-2",
+    parentId: "summary-1",
+    text: "Branch for replay.",
+  });
+
+  const entries = await store.readAll(path);
+  expect(entries.map((entry) => entry.type)).toContain("compactionSummary");
+  expect(entries.map((entry) => entry.type)).toContain("branchSummary");
+});

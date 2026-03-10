@@ -1,4 +1,9 @@
-import { type AgentMessage, isAgentMessage } from "@pi-bun-effect/core";
+import {
+  type AgentMessage,
+  type BranchSummaryMessageEntry,
+  type CompactionSummaryMessageEntry,
+  isAgentMessage,
+} from "@pi-bun-effect/core";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
@@ -32,6 +37,14 @@ export interface SessionStore {
     entry:
       & Omit<JsonlSessionEntry, "id" | "timestamp">
       & Partial<Pick<JsonlSessionEntry, "id" | "timestamp">>,
+  ): Promise<JsonlSessionEntry>;
+  appendCompactionSummary(
+    path: string,
+    params: { parentId?: string; text: string; id?: string; timestamp?: string },
+  ): Promise<JsonlSessionEntry>;
+  appendBranchSummary(
+    path: string,
+    params: { parentId?: string; text: string; id?: string; timestamp?: string },
   ): Promise<JsonlSessionEntry>;
   readAll(path: string): Promise<JsonlSessionEntry[]>;
   migrate(path: string): Promise<SessionVersion>;
@@ -177,6 +190,50 @@ export class JsonlSessionStore implements SessionStore {
     };
     await appendLine(path, stringifyEntry(prepared));
     return prepared;
+  }
+
+  async appendCompactionSummary(
+    path: string,
+    params: { parentId?: string; text: string; id?: string; timestamp?: string },
+  ): Promise<JsonlSessionEntry> {
+    const message: CompactionSummaryMessageEntry = {
+      type: "compactionSummary",
+      role: "system",
+      id: params.id ?? makeId(),
+      parentId: params.parentId,
+      timestamp: params.timestamp ?? nowIso(),
+      content: [{ type: "text", text: params.text }],
+    };
+
+    return this.append(path, {
+      type: "compactionSummary",
+      parentId: params.parentId,
+      id: params.id,
+      timestamp: params.timestamp,
+      data: message,
+    });
+  }
+
+  async appendBranchSummary(
+    path: string,
+    params: { parentId?: string; text: string; id?: string; timestamp?: string },
+  ): Promise<JsonlSessionEntry> {
+    const message: BranchSummaryMessageEntry = {
+      type: "branchSummary",
+      role: "system",
+      id: params.id ?? makeId(),
+      parentId: params.parentId,
+      timestamp: params.timestamp ?? nowIso(),
+      content: [{ type: "text", text: params.text }],
+    };
+
+    return this.append(path, {
+      type: "branchSummary",
+      parentId: params.parentId,
+      id: params.id,
+      timestamp: params.timestamp,
+      data: message,
+    });
   }
 
   async readAll(path: string): Promise<JsonlSessionEntry[]> {

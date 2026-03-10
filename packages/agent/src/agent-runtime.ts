@@ -1,8 +1,11 @@
 import type {
   AgentEvent,
   AgentMessage,
+  AssistantMessageEntry,
+  CompactionSummaryMessageEntry,
   QueueRequest,
 } from "@pi-bun-effect/core";
+import { compactTranscript, estimateTokens } from "./compaction";
 
 export interface AgentConfig {
   sessionId: string;
@@ -65,6 +68,7 @@ export class InMemoryAgentSession implements AgentSession {
   private running = false;
   private queueDepth = { steer: 0, followUp: 0 };
   private pending: QueueRequest[] = [];
+  private transcript: AgentMessage[] = [];
 
   constructor(private readonly config: AgentConfig) {
     this.state = {
@@ -79,10 +83,12 @@ export class InMemoryAgentSession implements AgentSession {
   }
 
   async prompt(input: TurnInput): Promise<TurnResult> {
+    this.transcript.push(input.message);
     return this.executeTurn("prompt", input.message.id);
   }
 
   async steer(input: TurnInput): Promise<TurnResult> {
+    this.transcript.push(input.message);
     return this.requestQueue(
       {
         queue: "steer",
@@ -92,6 +98,7 @@ export class InMemoryAgentSession implements AgentSession {
   }
 
   async followUp(input: TurnInput): Promise<TurnResult> {
+    this.transcript.push(input.message);
     return this.requestQueue(
       {
         queue: "followUp",
@@ -123,8 +130,24 @@ export class InMemoryAgentSession implements AgentSession {
   }
 
   async compact(): Promise<void> {
-    // No-op placeholder in scaffold implementation.
-    return undefined;
+    const budget = Math.max(
+      1,
+      this.config.contextWindowTokens - this.config.reserveTokens,
+    );
+    const compacted = compactTranscript(this.transcript, { maxTokens: budget });
+    if (compacted.removed.length === 0) {
+      return;
+    }
+
+    const summary: CompactionSummaryMessageEntry = {
+      type: "compactionSummary",
+      role: "system",
+      id: makeId(),
+      timestamp: nowIso(),
+      content: [{ type: "text", text: compacted.summaryText }],
+    };
+
+    this.transcript = [summary, ...compacted.retained];
   }
 
   async getState(): Promise<AgentState> {
@@ -194,6 +217,27 @@ export class InMemoryAgentSession implements AgentSession {
 
     for (const event of events) {
       this.emit(event);
+    }
+
+    const assistantMessage: AssistantMessageEntry = {
+      type: "assistant",
+      role: "assistant",
+      id: makeId(),
+      timestamp: nowIso(),
+      content: [{ type: "text", text: `mode=${mode}; received=${sourceId}` }],
+    };
+    this.transcript.push(assistantMessage);
+
+    const budget = Math.max(
+      1,
+      this.config.contextWindowTokens - this.config.reserveTokens,
+    );
+    const totalTokens = this.transcript.reduce(
+      (sum, message) => sum + estimateTokens(message),
+      0,
+    );
+    if (this.config.autoCompaction && totalTokens > budget) {
+      await this.compact();
     }
 
     this.state.isRunning = false;

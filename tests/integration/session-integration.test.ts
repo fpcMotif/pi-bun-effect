@@ -128,3 +128,55 @@ test("integration: session state, branching, and queue consistency", async () =>
   expect(state.queueDepth.steer).toBe(0);
   expect(linearized.some((entry) => entry.type === "assistant")).toBeTrue();
 });
+
+
+test("integration: replay chain remains valid after compaction summaries", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-bun-effect-integration-"));
+  const path = join(root, "session-replay.jsonl");
+  const store = createSessionStore();
+
+  const rootEntry = await store.append(path, {
+    id: "root",
+    type: "user",
+    data: userMessage("u1", "initial prompt"),
+  });
+  const assistantEntry = await store.append(path, {
+    id: "assistant-1",
+    type: "assistant",
+    parentId: rootEntry.id,
+    data: assistantMessage("a1", "long answer"),
+  });
+  const compactionEntry = await store.appendCompactionSummary(path, {
+    id: "compact-1",
+    parentId: assistantEntry.id,
+    text: "Compacted earlier turns.",
+  });
+  const branchEntry = await store.appendBranchSummary(path, {
+    id: "branch-1",
+    parentId: compactionEntry.id,
+    text: "Branched after replay.",
+  });
+  const resumed = await store.append(path, {
+    id: "assistant-2",
+    type: "assistant",
+    parentId: branchEntry.id,
+    data: assistantMessage("a2", "resumed context"),
+  });
+
+  const chain = await store.linearizeFrom(path, resumed.id);
+
+  expect(chain.map((entry) => entry.id)).toEqual([
+    "root",
+    "assistant-1",
+    "compact-1",
+    "branch-1",
+    "assistant-2",
+  ]);
+  expect(chain.map((entry) => entry.type)).toEqual([
+    "user",
+    "assistant",
+    "compactionSummary",
+    "branchSummary",
+    "assistant",
+  ]);
+});
