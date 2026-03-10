@@ -1,0 +1,4 @@
+{
+  "request": { "id": "fx-messages", "command": "get_messages" },
+  "expectedStatus": "ok"
+}

@@ -1,0 +1,4 @@
+{
+  "request": { "id": "fx-state", "command": "get_state" },
+  "expectedStatus": "ok"
+}

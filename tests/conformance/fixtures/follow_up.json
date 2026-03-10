@@ -1,0 +1,16 @@
+{
+  "request": {
+    "id": "fx-follow",
+    "command": "follow_up",
+    "payload": {
+      "message": {
+        "type": "user",
+        "role": "user",
+        "id": "m-follow",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "content": [{ "type": "text", "text": "follow" }]
+      }
+    }
+  },
+  "expectedStatus": "ok"
+}

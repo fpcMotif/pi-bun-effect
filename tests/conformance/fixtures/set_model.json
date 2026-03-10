@@ -1,0 +1,8 @@
+{
+  "request": {
+    "id": "fx-model",
+    "command": "set_model",
+    "payload": { "provider": "anthropic", "modelId": "claude-sonnet" }
+  },
+  "expectedStatus": "ok"
+}

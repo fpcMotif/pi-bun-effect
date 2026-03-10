@@ -1,0 +1,4 @@
+{
+  "request": { "id": "fx-fork-bad", "command": "fork", "payload": { "entryId": "missing-entry" } },
+  "expectedStatus": "error"
+}

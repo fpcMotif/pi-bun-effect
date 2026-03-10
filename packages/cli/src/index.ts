@@ -1,8 +1,7 @@
 import {
+  createRpcCommandDispatcher,
   createRpcProtocol,
-  type RpcEvent,
   type RpcRequest,
-  type RpcResponse,
 } from "@pi-bun-effect/rpc";
 
 export interface CliCommand {
@@ -85,23 +84,6 @@ function formatEvent(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function makeTurnEvent(
-  sessionId: string,
-  turn: string,
-  payload: string,
-): RpcEvent {
-  return {
-    type: "agent_event",
-    id: `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`,
-    command: "prompt",
-    payload: {
-      sessionId,
-      turn,
-      payload,
-    },
-  };
-}
-
 export async function runCli(
   argv: string[] = process.argv.slice(2),
 ): Promise<number> {
@@ -130,23 +112,28 @@ export async function runCli(
   }
 
   if (parsed.mode === "rpc") {
+    const dispatcher = createRpcCommandDispatcher({
+      onEvent: (event) => {
+        console.log(protocol.encodeEvent(event));
+      },
+    });
+
     const raw = await new Response(Bun.stdin).text();
     const lines = raw.split(/\r?\n/);
-    const sessionId = `session-${Date.now().toString(16)}`;
 
     for (const rawLine of lines) {
-      const request = protocol.parseLine(rawLine);
+      const request = protocol.parseLine(rawLine) as RpcRequest | null;
       if (!request) {
         continue;
       }
-      const response = await handleRpcCommand(protocol, request, sessionId, 0);
-      if (response) {
-        console.log(protocol.encodeResponse(response));
-        if (request.command === "abort") {
-          break;
-        }
+      const response = await dispatcher.dispatch(request);
+      console.log(protocol.encodeResponse(response));
+      if (request.command === "abort") {
+        break;
       }
     }
+
+    await dispatcher.waitForQueue();
     return 0;
   }
 
@@ -164,82 +151,6 @@ export async function runCli(
   };
   console.log(formatEvent(fallback));
   return 0;
-}
-
-async function handleRpcCommand(
-  protocol: ReturnType<typeof createRpcProtocol>,
-  request: RpcRequest,
-  sessionId: string,
-  turn: number,
-): Promise<RpcResponse> {
-  if (request.command === "prompt") {
-    const prompt = (
-      request.payload as { message?: { content?: unknown[] } } | undefined
-    )?.message;
-    const payload = { sessionId, received: prompt ?? null, turn };
-    const event = makeTurnEvent(
-      sessionId,
-      `${turn}`,
-      `${JSON.stringify(payload)}`,
-    );
-    console.log(formatEvent(event));
-
-    return {
-      id: request.id,
-      command: request.command,
-      status: "ok",
-      result: payload,
-    };
-  }
-
-  if (
-    request.command === "steer"
-    || request.command === "followUp"
-    || request.command === "follow_up"
-  ) {
-    return {
-      id: request.id,
-      command: request.command,
-      status: "ok",
-      result: {
-        sessionId,
-        command: request.command,
-        queued: true,
-      },
-    };
-  }
-
-  if (request.command === "get_state") {
-    return {
-      id: request.id,
-      command: request.command,
-      status: "ok",
-      result: {
-        sessionId,
-        busy: false,
-        queued: 0,
-      },
-    };
-  }
-
-  if (request.command === "get_messages") {
-    return {
-      id: request.id,
-      command: request.command,
-      status: "ok",
-      result: {
-        sessionId,
-        messages: [],
-      },
-    };
-  }
-
-  return {
-    id: request.id,
-    command: request.command,
-    status: "error",
-    error: `unsupported command: ${request.command}`,
-  };
 }
 
 export function listCliCommands(): CliCommand[] {

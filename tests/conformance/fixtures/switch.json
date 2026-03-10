@@ -1,0 +1,4 @@
+{
+  "request": { "id": "fx-switch", "command": "switch", "payload": { "sessionId": "fixture-session" } },
+  "expectedStatus": "ok"
+}

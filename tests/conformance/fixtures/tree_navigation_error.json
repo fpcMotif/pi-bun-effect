@@ -1,0 +1,8 @@
+{
+  "request": {
+    "id": "fx-tree-bad",
+    "command": "tree_navigation",
+    "payload": { "action": "sideways", "entryId": "x" }
+  },
+  "expectedStatus": "error"
+}

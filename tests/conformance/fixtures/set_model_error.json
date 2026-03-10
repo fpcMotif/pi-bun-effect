@@ -1,0 +1,4 @@
+{
+  "request": { "id": "fx-model-bad", "command": "set_model", "payload": { "provider": "openai" } },
+  "expectedStatus": "error"
+}

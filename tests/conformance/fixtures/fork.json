@@ -1,0 +1,4 @@
+{
+  "request": { "id": "fx-fork", "command": "fork", "payload": { "entryId": "__ENTRY_ID__" } },
+  "expectedStatus": "ok"
+}

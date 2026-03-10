@@ -1,0 +1,8 @@
+{
+  "request": {
+    "id": "fx-tree-parent",
+    "command": "tree_navigation",
+    "payload": { "action": "parent", "entryId": "__ENTRY_ID__" }
+  },
+  "expectedStatus": "ok"
+}

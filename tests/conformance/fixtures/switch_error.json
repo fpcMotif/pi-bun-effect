@@ -1,0 +1,4 @@
+{
+  "request": { "id": "fx-switch-bad", "command": "switch", "payload": {} },
+  "expectedStatus": "error"
+}

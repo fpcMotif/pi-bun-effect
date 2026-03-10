@@ -1,0 +1,4 @@
+{
+  "request": { "id": "fx-new", "command": "new_session" },
+  "expectedStatus": "ok"
+}

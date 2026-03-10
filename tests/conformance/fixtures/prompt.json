@@ -1,0 +1,16 @@
+{
+  "request": {
+    "id": "fx-prompt",
+    "command": "prompt",
+    "payload": {
+      "message": {
+        "type": "user",
+        "role": "user",
+        "id": "m-prompt",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "content": [{ "type": "text", "text": "hello" }]
+      }
+    }
+  },
+  "expectedStatus": "ok"
+}

@@ -1,0 +1,16 @@
+{
+  "request": {
+    "id": "fx-steer",
+    "command": "steer",
+    "payload": {
+      "message": {
+        "type": "user",
+        "role": "user",
+        "id": "m-steer",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "content": [{ "type": "text", "text": "steer me" }]
+      }
+    }
+  },
+  "expectedStatus": "ok"
+}

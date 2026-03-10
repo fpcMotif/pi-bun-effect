@@ -1,0 +1,8 @@
+{
+  "request": {
+    "id": "fx-tree-linearize",
+    "command": "tree_navigation",
+    "payload": { "action": "linearize", "entryId": "__ENTRY_ID__" }
+  },
+  "expectedStatus": "ok"
+}

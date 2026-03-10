@@ -1,0 +1,4 @@
+{
+  "request": { "id": "fx-compact", "command": "compact" },
+  "expectedStatus": "ok"
+}
