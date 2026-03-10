@@ -1,9 +1,16 @@
-import type { AgentMessage } from "@pi-bun-effect/core";
+import {
+  type AgentMessage,
+  type AuditLogger,
+  NoopAuditLogger,
+  nowIso,
+  redactMetadata,
+} from "@pi-bun-effect/core";
 import type { Capability, TrustDecision } from "@pi-bun-effect/extensions";
 import { randomUUID } from "node:crypto";
 
 export interface ToolContext {
   sessionId: string;
+  requestId?: string;
   extensionId: string;
   capabilities: Set<Capability>;
   trust: TrustDecision;
@@ -217,6 +224,8 @@ const BASH_TOOL: ToolDefinition = {
 export class InMemoryToolRegistry implements ToolRegistry {
   private readonly definitions = new Map<string, ToolDefinition>();
 
+  constructor(private readonly auditLogger: AuditLogger = new NoopAuditLogger()) {}
+
   register(definition: ToolDefinition): void {
     this.definitions.set(definition.name, definition);
   }
@@ -239,10 +248,67 @@ export class InMemoryToolRegistry implements ToolRegistry {
   ): Promise<ToolOutput> {
     const definition = this.definitions.get(invocation.name);
     if (!definition) {
+      this.auditLogger.emit({
+        type: "tools.registry.execute",
+        at: nowIso(),
+        extensionId: context.extensionId,
+        capability: `tool:${invocation.name}`,
+        toolName: invocation.name,
+        outcome: "deny",
+        reason: "tool not found",
+        correlationIds: {
+          sessionId: context.sessionId,
+          requestId: context.requestId,
+        },
+        metadata: redactMetadata({
+          invocationInput: invocation.input,
+        }),
+      });
       throw new Error(`tool not found: ${invocation.name}`);
     }
 
-    return definition.run(context, invocation);
+    try {
+      const output = await definition.run(context, invocation);
+      this.auditLogger.emit({
+        type: "tools.registry.execute",
+        at: nowIso(),
+        extensionId: context.extensionId,
+        capability: `tool:${invocation.name}`,
+        toolName: invocation.name,
+        command: invocation.raw,
+        outcome: output.content.type === "toolResult" && output.content.isError
+          ? "error"
+          : "success",
+        correlationIds: {
+          sessionId: context.sessionId,
+          requestId: context.requestId,
+        },
+        metadata: redactMetadata({
+          invocationInput: invocation.input,
+          debug: output.debug,
+        }),
+      });
+      return output;
+    } catch (error) {
+      this.auditLogger.emit({
+        type: "tools.registry.execute",
+        at: nowIso(),
+        extensionId: context.extensionId,
+        capability: `tool:${invocation.name}`,
+        toolName: invocation.name,
+        command: invocation.raw,
+        outcome: "error",
+        reason: error instanceof Error ? error.message : "unknown tool failure",
+        correlationIds: {
+          sessionId: context.sessionId,
+          requestId: context.requestId,
+        },
+        metadata: redactMetadata({
+          invocationInput: invocation.input,
+        }),
+      });
+      throw error;
+    }
   }
 }
 
@@ -261,8 +327,8 @@ export const builtinTools: BuiltinTools = {
   },
 };
 
-export function createToolRegistry(): ToolRegistry {
-  const registry = new InMemoryToolRegistry();
+export function createToolRegistry(auditLogger?: AuditLogger): ToolRegistry {
+  const registry = new InMemoryToolRegistry(auditLogger);
   return registry;
 }
 
