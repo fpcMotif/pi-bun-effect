@@ -49,3 +49,37 @@ test("policy capability allowlist blocks non-allowed command", async () => {
   const result = await policy.check("ext-allow", "exec:spawn", "ls");
   expect(result.allowed).toBeFalse();
 });
+
+test("policy evaluates capability allow and deny", () => {
+  const policy = createPolicyEngine([
+    {
+      extensionId: "ext-cap",
+      capabilities: ["tool:read", "tool:bash"],
+      allowCommands: [],
+      denyCommands: [],
+      denyPatterns: [],
+    },
+  ]);
+
+  expect(policy.evaluateCapability("ext-cap", "tool:read")).toBeTrue();
+  expect(policy.evaluateCapability("ext-cap", "tool:write")).toBeFalse();
+});
+
+test("policy check allows command when capability and command are allowed", async () => {
+  const policy = createPolicyEngine([
+    {
+      extensionId: "ext-bash-allow",
+      capabilities: ["tool:bash"],
+      allowCommands: ["echo hello"],
+      denyCommands: [],
+      denyPatterns: [],
+    },
+  ]);
+
+  const allowed = await policy.check("ext-bash-allow", "tool:bash", "echo hello");
+  const denied = await policy.check("ext-bash-allow", "tool:bash", "echo nope");
+
+  expect(allowed.allowed).toBeTrue();
+  expect(denied.allowed).toBeFalse();
+  expect(denied.reason).toContain("allowlist");
+});

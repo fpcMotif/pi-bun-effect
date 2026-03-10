@@ -1,5 +1,10 @@
 import type { AgentMessage } from "@pi-bun-effect/core";
-import type { Capability, TrustDecision } from "@pi-bun-effect/extensions";
+import type {
+  Capability,
+  CommandMediationResult,
+  PolicyEngine,
+  TrustDecision,
+} from "@pi-bun-effect/extensions";
 import { randomUUID } from "node:crypto";
 
 export interface ToolContext {
@@ -45,6 +50,61 @@ export interface BuiltinTools {
   registerBashTool(registry: ToolRegistry): void;
 }
 
+export interface CreateToolRegistryOptions {
+  policyEngine?: PolicyEngine;
+}
+
+const TOOL_CAPABILITIES: Partial<Record<string, Capability>> = {
+  read: "tool:read",
+  write: "tool:write",
+  edit: "tool:edit",
+  bash: "tool:bash",
+};
+
+const allowAllPolicyEngine: PolicyEngine = {
+  evaluateCapability() {
+    return true;
+  },
+  async check() {
+    return { allowed: true };
+  },
+  async getTrust(extensionId: string) {
+    return {
+      extensionId,
+      decision: "trusted",
+      changedBy: "default-policy-engine",
+      changedAt: new Date().toISOString(),
+      note: "allow-all default behavior",
+    };
+  },
+  async setTrust() {
+    return;
+  },
+};
+
+function buildToolResult(
+  toolName: string,
+  text: string,
+  isError = false,
+): AgentMessage {
+  return {
+    type: "toolResult",
+    role: "tool",
+    id: randomUUID(),
+    parentId: undefined,
+    timestamp: new Date().toISOString(),
+    toolCallId: `tool-${randomUUID()}`,
+    toolName,
+    isError,
+    content: [
+      {
+        type: "text",
+        text,
+      },
+    ],
+  };
+}
+
 const READ_TOOL: ToolDefinition = {
   name: "read",
   description: "Read file content",
@@ -55,21 +115,7 @@ const READ_TOOL: ToolDefinition = {
       ? Bun.file(path).text()
       : Promise.resolve(""));
     return {
-      content: {
-        type: "toolResult",
-        role: "tool",
-        id: randomUUID(),
-        parentId: undefined,
-        timestamp: new Date().toISOString(),
-        toolCallId: `tool-${randomUUID()}`,
-        toolName: "read",
-        content: [
-          {
-            type: "text",
-            text: data,
-          },
-        ],
-      },
+      content: buildToolResult("read", data),
       debug: {
         bytes: encoder.encode(data).byteLength,
       },
@@ -87,22 +133,7 @@ const WRITE_TOOL: ToolDefinition = {
       await Bun.write(path, text);
     }
     return {
-      content: {
-        type: "toolResult",
-        role: "tool",
-        id: randomUUID(),
-        parentId: undefined,
-        timestamp: new Date().toISOString(),
-        toolCallId: `tool-${randomUUID()}`,
-        toolName: "write",
-        isError: false,
-        content: [
-          {
-            type: "text",
-            text: `wrote=${path}`,
-          },
-        ],
-      },
+      content: buildToolResult("write", `wrote=${path}`),
     };
   },
 };
@@ -122,21 +153,7 @@ const EDIT_TOOL: ToolDefinition = {
       await Bun.write(path, next);
     }
     return {
-      content: {
-        type: "toolResult",
-        role: "tool",
-        id: randomUUID(),
-        parentId: undefined,
-        timestamp: new Date().toISOString(),
-        toolCallId: `tool-${randomUUID()}`,
-        toolName: "edit",
-        content: [
-          {
-            type: "text",
-            text: `edited=${path}`,
-          },
-        ],
-      },
+      content: buildToolResult("edit", `edited=${path}`),
     };
   },
 };
@@ -148,42 +165,13 @@ const BASH_TOOL: ToolDefinition = {
     const command = String(invocation.input.command ?? "");
     if (!command) {
       return {
-        content: {
-          type: "toolResult",
-          role: "tool",
-          id: randomUUID(),
-          parentId: undefined,
-          timestamp: new Date().toISOString(),
-          toolCallId: `tool-${randomUUID()}`,
-          toolName: "bash",
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: "no command provided",
-            },
-          ],
-        },
+        content: buildToolResult("bash", "no command provided", true),
       };
     }
 
     if (typeof Bun === "undefined") {
       return {
-        content: {
-          type: "toolResult",
-          role: "tool",
-          id: randomUUID(),
-          parentId: undefined,
-          timestamp: new Date().toISOString(),
-          toolCallId: `tool-${randomUUID()}`,
-          toolName: "bash",
-          content: [
-            {
-              type: "text",
-              text: `mock-run:${command}`,
-            },
-          ],
-        },
+        content: buildToolResult("bash", `mock-run:${command}`),
       };
     }
 
@@ -191,22 +179,11 @@ const BASH_TOOL: ToolDefinition = {
     const output = process.stdout.toString();
     const error = process.stderr.toString();
     return {
-      content: {
-        type: "toolResult",
-        role: "tool",
-        id: randomUUID(),
-        parentId: undefined,
-        timestamp: new Date().toISOString(),
-        toolCallId: `tool-${randomUUID()}`,
-        toolName: "bash",
-        isError: process.exitCode !== 0,
-        content: [
-          {
-            type: "text",
-            text: output || error || `exit=${process.exitCode}`,
-          },
-        ],
-      },
+      content: buildToolResult(
+        "bash",
+        output || error || `exit=${process.exitCode}`,
+        process.exitCode !== 0,
+      ),
       debug: {
         exitCode: process.exitCode,
       },
@@ -216,6 +193,7 @@ const BASH_TOOL: ToolDefinition = {
 
 export class InMemoryToolRegistry implements ToolRegistry {
   private readonly definitions = new Map<string, ToolDefinition>();
+  constructor(private readonly policyEngine: PolicyEngine = allowAllPolicyEngine) {}
 
   register(definition: ToolDefinition): void {
     this.definitions.set(definition.name, definition);
@@ -242,7 +220,97 @@ export class InMemoryToolRegistry implements ToolRegistry {
       throw new Error(`tool not found: ${invocation.name}`);
     }
 
-    return definition.run(context, invocation);
+    const requiredCapability = TOOL_CAPABILITIES[invocation.name];
+    const trustRecord = await this.policyEngine.getTrust(context.extensionId);
+
+    let bashMediation: CommandMediationResult | undefined;
+
+    if (requiredCapability) {
+      const capabilityAllowed = this.policyEngine.evaluateCapability(
+        context.extensionId,
+        requiredCapability,
+      );
+      if (!capabilityAllowed) {
+        return {
+          content: buildToolResult(
+            invocation.name,
+            `capability denied: ${requiredCapability}`,
+            true,
+          ),
+          debug: {
+            error: {
+              code: "CAPABILITY_DENIED",
+              requiredCapability,
+            },
+            policy: {
+              requiredCapability,
+              allowed: false,
+              contextHasCapability: context.capabilities.has(requiredCapability),
+            },
+            trust: {
+              decision: trustRecord.decision,
+              changedAt: trustRecord.changedAt,
+              changedBy: trustRecord.changedBy,
+            },
+          },
+        };
+      }
+
+      if (invocation.name === "bash") {
+        const command = String(invocation.input.command ?? "");
+        const mediation = await this.policyEngine.check(
+          context.extensionId,
+          requiredCapability,
+          command,
+        );
+        bashMediation = mediation;
+
+        if (!mediation.allowed) {
+          return {
+            content: buildToolResult(
+              invocation.name,
+              mediation.reason ?? "command blocked by policy",
+              true,
+            ),
+            debug: {
+              error: {
+                code: "POLICY_CHECK_DENIED",
+                requiredCapability,
+              },
+              policy: {
+                requiredCapability,
+                mediation,
+              },
+              trust: {
+                decision: trustRecord.decision,
+                changedAt: trustRecord.changedAt,
+                changedBy: trustRecord.changedBy,
+              },
+            },
+          };
+        }
+      }
+    }
+
+    const result = await definition.run(context, invocation);
+    const debug = {
+      ...(result.debug ?? {}),
+      policy: {
+        requiredCapability,
+        allowed: true,
+        mediation: bashMediation,
+      },
+      trust: {
+        decision: trustRecord.decision,
+        changedAt: trustRecord.changedAt,
+        changedBy: trustRecord.changedBy,
+      },
+    };
+
+    return {
+      ...result,
+      debug,
+    };
   }
 }
 
@@ -261,8 +329,12 @@ export const builtinTools: BuiltinTools = {
   },
 };
 
-export function createToolRegistry(): ToolRegistry {
-  const registry = new InMemoryToolRegistry();
+export function createToolRegistry(
+  options: CreateToolRegistryOptions = {},
+): ToolRegistry {
+  const registry = new InMemoryToolRegistry(
+    options.policyEngine ?? allowAllPolicyEngine,
+  );
   return registry;
 }
 

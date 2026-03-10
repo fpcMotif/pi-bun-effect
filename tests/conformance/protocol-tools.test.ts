@@ -1,5 +1,9 @@
 import type { AgentMessage } from "@pi-bun-effect/core";
-import type { Capability, TrustDecision } from "@pi-bun-effect/extensions";
+import {
+  createPolicyEngine,
+  type Capability,
+  type TrustDecision,
+} from "@pi-bun-effect/extensions";
 import type { RpcPayloads, RpcRequest } from "@pi-bun-effect/rpc";
 import { createRpcProtocol } from "@pi-bun-effect/rpc";
 import { createToolRegistry, registerBuiltinTools } from "@pi-bun-effect/tools";
@@ -104,4 +108,73 @@ test("conformance: builtin tools satisfy read/write/edit/bash contracts", async 
   expect(bashText).toContain("ok");
 
   rmSync(root, { recursive: true, force: true });
+});
+
+test("conformance: tool registry denies missing capability and records audit metadata", async () => {
+  const policy = createPolicyEngine([
+    {
+      extensionId: "ext-limited",
+      capabilities: ["tool:read"],
+      allowCommands: [],
+      denyCommands: [],
+      denyPatterns: [],
+    },
+  ]);
+  const registry = createToolRegistry({ policyEngine: policy });
+  registerBuiltinTools(registry);
+
+  const context: ToolContext = {
+    sessionId: "conformance-session-denied",
+    extensionId: "ext-limited",
+    capabilities: new Set<Capability>(["tool:read", "tool:write"]),
+    trust: "trusted",
+  };
+
+  const denied = await registry.execute(context, {
+    name: "write",
+    input: { path: "ignored.txt", text: "blocked" },
+  });
+
+  expect(denied.content.isError).toBeTrue();
+  expect(denied.content.content.at(0)?.text).toContain("capability denied");
+  expect((denied.debug?.error as { code?: string }).code).toBe(
+    "CAPABILITY_DENIED",
+  );
+  expect((denied.debug?.trust as { decision?: string }).decision).toBe(
+    "acknowledged",
+  );
+});
+
+test("conformance: bash uses policy check to deny command and surface mediation details", async () => {
+  const policy = createPolicyEngine([
+    {
+      extensionId: "ext-bash-guarded",
+      capabilities: ["tool:bash"],
+      allowCommands: ["echo safe"],
+      denyCommands: [],
+      denyPatterns: [],
+    },
+  ]);
+
+  const registry = createToolRegistry({ policyEngine: policy });
+  registerBuiltinTools(registry);
+
+  const context: ToolContext = {
+    sessionId: "conformance-bash-denied",
+    extensionId: "ext-bash-guarded",
+    capabilities: new Set<Capability>(["tool:bash"]),
+    trust: "trusted",
+  };
+
+  const denied = await registry.execute(context, {
+    name: "bash",
+    input: { command: "echo blocked" },
+  });
+
+  expect(denied.content.isError).toBeTrue();
+  expect((denied.debug?.policy as { mediation?: { allowed?: boolean } }).mediation
+    ?.allowed).toBeFalse();
+  expect(
+    (denied.debug?.error as { code?: string }).code,
+  ).toBe("POLICY_CHECK_DENIED");
 });
