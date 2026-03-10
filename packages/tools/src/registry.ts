@@ -1,6 +1,11 @@
 import type { AgentMessage } from "@pi-bun-effect/core";
-import type { Capability, TrustDecision } from "@pi-bun-effect/extensions";
+import type {
+  Capability,
+  PolicyEngine,
+  TrustDecision,
+} from "@pi-bun-effect/extensions";
 import { randomUUID } from "node:crypto";
+import type { AuditEventSink, ToolAuditEvent } from "./audit";
 
 export interface ToolContext {
   sessionId: string;
@@ -36,6 +41,11 @@ export interface ToolRegistry {
     context: ToolContext,
     invocation: ToolInvocation,
   ): Promise<ToolOutput>;
+}
+
+export interface ToolRegistryOptions {
+  policyEngine?: PolicyEngine;
+  auditSink?: AuditEventSink;
 }
 
 export interface BuiltinTools {
@@ -217,6 +227,8 @@ const BASH_TOOL: ToolDefinition = {
 export class InMemoryToolRegistry implements ToolRegistry {
   private readonly definitions = new Map<string, ToolDefinition>();
 
+  constructor(private readonly options: ToolRegistryOptions = {}) {}
+
   register(definition: ToolDefinition): void {
     this.definitions.set(definition.name, definition);
   }
@@ -237,13 +249,121 @@ export class InMemoryToolRegistry implements ToolRegistry {
     context: ToolContext,
     invocation: ToolInvocation,
   ): Promise<ToolOutput> {
+    const requestedAt = new Date();
     const definition = this.definitions.get(invocation.name);
     if (!definition) {
       throw new Error(`tool not found: ${invocation.name}`);
     }
 
-    return definition.run(context, invocation);
+    const capability = capabilityForTool(invocation.name);
+    const commandInfo = serializeInvocation(invocation);
+
+    if (capability && !context.capabilities.has(capability)) {
+      const now = new Date();
+      await this.emitAudit({
+        sessionId: context.sessionId,
+        extensionId: context.extensionId,
+        toolName: invocation.name,
+        command: commandInfo.command,
+        decision: "deny",
+        reason: `Capability missing in context: ${capability}`,
+        redactedFields: commandInfo.redactedFields,
+        requestedAt: requestedAt.toISOString(),
+        decidedAt: now.toISOString(),
+        completedAt: now.toISOString(),
+        durationMs: now.getTime() - requestedAt.getTime(),
+      });
+      throw new Error(`tool execution denied: missing capability ${capability}`);
+    }
+
+    if (capability && this.options.policyEngine) {
+      const mediation = await this.options.policyEngine.check(
+        context.extensionId,
+        capability,
+        commandInfo.command,
+      );
+      if (!mediation.allowed) {
+        const now = new Date();
+        await this.emitAudit({
+          sessionId: context.sessionId,
+          extensionId: context.extensionId,
+          toolName: invocation.name,
+          command: commandInfo.command,
+          decision: "deny",
+          reason: mediation.reason,
+          redactedFields: commandInfo.redactedFields,
+          requestedAt: requestedAt.toISOString(),
+          decidedAt: now.toISOString(),
+          completedAt: now.toISOString(),
+          durationMs: now.getTime() - requestedAt.getTime(),
+        });
+        throw new Error(`tool execution denied: ${mediation.reason ?? "policy"}`);
+      }
+    }
+
+    const output = await definition.run(context, invocation);
+    const completedAt = new Date();
+    await this.emitAudit({
+      sessionId: context.sessionId,
+      extensionId: context.extensionId,
+      toolName: invocation.name,
+      command: commandInfo.command,
+      decision: "allow",
+      redactedFields: commandInfo.redactedFields,
+      requestedAt: requestedAt.toISOString(),
+      decidedAt: requestedAt.toISOString(),
+      completedAt: completedAt.toISOString(),
+      durationMs: completedAt.getTime() - requestedAt.getTime(),
+    });
+
+    return output;
   }
+
+  private async emitAudit(event: ToolAuditEvent): Promise<void> {
+    if (!this.options.auditSink) {
+      return;
+    }
+    await this.options.auditSink.emit(event);
+  }
+}
+
+const TOOL_CAPABILITY_MAP: Record<string, Capability> = {
+  read: "tool:read",
+  write: "tool:write",
+  edit: "tool:edit",
+  bash: "tool:bash",
+};
+
+function capabilityForTool(name: string): Capability | undefined {
+  return TOOL_CAPABILITY_MAP[name];
+}
+
+function serializeInvocation(invocation: ToolInvocation): {
+  command: string;
+  redactedFields: string[];
+} {
+  if (invocation.name === "bash") {
+    return {
+      command: String(invocation.input.command ?? ""),
+      redactedFields: [],
+    };
+  }
+
+  const redactedFields = Object.keys(invocation.input).filter((key) =>
+    ["text", "replace", "raw", "content", "token", "password", "secret"]
+      .includes(key)
+  );
+  const sanitized = Object.fromEntries(
+    Object.entries(invocation.input).map(([key, value]) => [
+      key,
+      redactedFields.includes(key) ? "[REDACTED]" : value,
+    ]),
+  );
+
+  return {
+    command: `${invocation.name} ${JSON.stringify(sanitized)}`,
+    redactedFields,
+  };
 }
 
 export const builtinTools: BuiltinTools = {
@@ -261,8 +381,8 @@ export const builtinTools: BuiltinTools = {
   },
 };
 
-export function createToolRegistry(): ToolRegistry {
-  const registry = new InMemoryToolRegistry();
+export function createToolRegistry(options: ToolRegistryOptions = {}): ToolRegistry {
+  const registry = new InMemoryToolRegistry(options);
   return registry;
 }
 
