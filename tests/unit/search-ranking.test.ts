@@ -6,8 +6,7 @@ import {
   type SearchService,
 } from "@pi-bun-effect/search";
 import { expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -18,50 +17,63 @@ test("frecency decay is monotonic for positive aging", () => {
   expect(near).toBeGreaterThan(far);
 });
 
-test("rank path is deterministic and stable", () => {
-  const scoreA = rankPath(
+test("rank path includes frecency and git signals", () => {
+  const stale = rankPath(
     "src/components/agent.ts",
     "agent",
     { fuzzy: 2, frecency: 1, git: 1 },
-    0.5,
+    0.1,
     false,
   );
-  const scoreB = rankPath(
-    "docs/agent.md",
+  const freshAndDirty = rankPath(
+    "src/components/agent.ts",
     "agent",
     { fuzzy: 2, frecency: 1, git: 1 },
-    0.5,
-    false,
-  );
-  const scoreC = rankPath(
-    "build/agent.md",
-    "agent",
-    { fuzzy: 2, frecency: 1, git: 1 },
-    0.5,
-    false,
+    0.9,
+    true,
   );
 
-  expect(scoreA).toBe(scoreB);
-  expect(scoreA).toBe(scoreC);
+  expect(freshAndDirty).toBeGreaterThan(stale);
 });
 
-test("search indexing and query returns matches", async () => {
-  const root = mkdtempSync(join(tmpdir(), "pi-bun-search-"));
-  const src = join(root, "workspace");
-  const nested = join(src, "notes");
-  mkdirSync(src, { recursive: true });
-  mkdirSync(nested, { recursive: true });
-  writeFileSync(join(src, "agent.txt"), "agent message");
-  writeFileSync(join(nested, "agent.spec.ts"), "spec");
+test("service rank reflects frecency from indexed files", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-bun-search-rank-"));
+  const file = join(root, "agent.log");
+  mkdirSync(root, { recursive: true });
+  writeFileSync(file, "agent");
+
+  const oldDate = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  utimesSync(file, oldDate, oldDate);
 
   const service: SearchService = createSearchService();
   await service.buildIndex(root);
 
-  const byPath = await service.queryFiles("agent", 10);
-  const byContent = await service.queryContent("agent", 10);
+  const staleScore = service.rank("agent", { fuzzy: 1, frecency: 3, git: 0 });
 
-  expect(Array.isArray(byPath)).toBeTrue();
-  expect(Array.isArray(byContent)).toBeTrue();
-  expect(byPath.some((entry) => entry.path.includes("agent"))).toBeTrue();
+  const now = new Date();
+  utimesSync(file, now, now);
+  await service.buildIndex(root);
+
+  const freshScore = service.rank("agent", { fuzzy: 1, frecency: 3, git: 0 });
+  expect(freshScore).toBeGreaterThan(staleScore);
+});
+
+test("search content finds content-only hits", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-bun-search-content-"));
+  const src = join(root, "workspace");
+  mkdirSync(src, { recursive: true });
+
+  writeFileSync(join(src, "alpha.txt"), "completely unrelated heading");
+  writeFileSync(join(src, "notes.md"), "contains hidden-nebula keyword here");
+
+  const service: SearchService = createSearchService();
+  await service.buildIndex(root);
+
+  const byPath = await service.queryFiles("hidden-nebula", 10);
+  const byContent = await service.queryContent("hidden-nebula", 10);
+
+  expect(byPath.length).toBe(0);
+  expect(byContent.some((entry) => entry.path.endsWith("notes.md"))).toBeTrue();
+  expect(byContent[0]?.snippet?.toLowerCase()).toContain("hidden-nebula");
   expect(normalizeToken("  HeLLo  ")).toBe("hello");
 });
