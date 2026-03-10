@@ -1,23 +1,18 @@
 import { createAgentSession } from "@pi-bun-effect/agent";
 import type { AgentMessage } from "@pi-bun-effect/core";
-import { createMockLlmProvider } from "@pi-bun-effect/llm";
-import type { LlmModelId } from "@pi-bun-effect/llm";
+import type {
+  LlmEvent,
+  LlmModelId,
+  LlmOptions,
+  LlmProvider,
+  LlmStreamResult,
+} from "@pi-bun-effect/llm";
 import { createSessionStore } from "@pi-bun-effect/session";
+import { createToolRegistry, type ToolInvocation } from "@pi-bun-effect/tools";
 import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
-function assistantMessage(id: string, text: string): AgentMessage {
-  return {
-    type: "assistant",
-    role: "assistant",
-    id,
-    timestamp: new Date().toISOString(),
-    model: "test-model",
-    content: [{ type: "text", text }],
-  };
-}
 
 function userMessage(id: string, text: string): AgentMessage {
   return {
@@ -29,102 +24,167 @@ function userMessage(id: string, text: string): AgentMessage {
   };
 }
 
-test("integration: fake llm stream emits deterministic event order", async () => {
-  const events = createMockLlmProvider([
-    { type: "start", payload: "stream-start" },
-    { type: "text_delta", payload: "intro" },
-    { type: "toolcall_start", payload: "tool:read" },
-    {
-      type: "toolcall_delta",
-      payload: JSON.stringify({
-        name: "read",
-        input: { path: "/tmp/path" },
-      }),
-    },
-    {
-      type: "toolcall_end",
-      payload: JSON.stringify({
-        name: "read",
-        input: { path: "/tmp/path" },
-      }),
-    },
-    { type: "done", payload: "complete" },
-  ]).stream({
-    provider: "openai",
-    modelId: "gpt-4o",
-  } as LlmModelId, []);
+class ScriptedProvider implements LlmProvider {
+  constructor(private readonly script: (context: AgentMessage[]) => LlmEvent[]) {}
 
-  const types: string[] = [];
-  const payloads: string[] = [];
-  for await (const event of events.stream) {
-    types.push(event.type);
-    payloads.push(event.payload ?? "");
+  async configure(): Promise<void> {}
+
+  async modelRegistry(): Promise<LlmModelId[]> {
+    return [{ provider: "openai", modelId: "gpt-4o-mini" }];
   }
 
-  expect(types).toEqual([
-    "start",
-    "text_delta",
-    "toolcall_start",
-    "toolcall_delta",
-    "toolcall_end",
-    "done",
-  ]);
-  expect(JSON.parse(payloads[3]!).name).toBe("read");
-});
+  stream(
+    _model: LlmModelId,
+    context: AgentMessage[],
+    _options?: LlmOptions,
+  ): LlmStreamResult {
+    const events = this.script(context);
+    async function* emit(): AsyncGenerator<LlmEvent> {
+      for (const event of events) {
+        yield event;
+      }
+    }
+    return { stream: emit() };
+  }
 
-test("integration: session state, branching, and queue consistency", async () => {
+  async complete(): Promise<AgentMessage> {
+    throw new Error("not used in integration tests");
+  }
+}
+
+test("integration: real turn flow streams and persists assistant output", async () => {
   const root = mkdtempSync(join(tmpdir(), "pi-bun-effect-integration-"));
-  const path = join(root, "session.jsonl");
+  const sessionPath = join(root, "session.jsonl");
   const store = createSessionStore();
-  const first = await store.append(path, {
-    type: "user",
-    data: userMessage("m1", "start"),
-  });
-  const second = await store.append(path, {
-    type: "assistant",
-    parentId: first.id,
-    data: assistantMessage("m2", "analysis"),
-  });
-  await store.append(path, {
-    type: "assistant",
-    parentId: first.id,
-    data: assistantMessage("m3", "branch"),
-  });
-  const branch = await store.fork(path, second.id);
-  const children = await store.children(path, second.id);
-  expect(children.some((entry) => entry.id === branch)).toBeTrue();
-  const linearized = await store.linearizeFrom(path, branch);
-  expect(linearized).toHaveLength(3);
-  expect(linearized.at(0)?.id).toBe(first.id);
+
+  const provider = new ScriptedProvider(() => [
+    { type: "start", payload: "start" },
+    { type: "text_delta", payload: "hello" },
+    { type: "text_delta", payload: " world" },
+    { type: "done", payload: "done" },
+  ]);
 
   const session = await createAgentSession({
-    sessionId: "integration-session",
+    sessionId: "integration-stream",
     contextWindowTokens: 4096,
-    reserveTokens: 128,
+    reserveTokens: 256,
     autoCompaction: true,
+    sessionStore: store,
+    sessionPath,
+    llmProvider: provider,
   });
 
   const events: string[] = [];
-  const unsubscribe = session.onEvent((event) => {
+  session.onEvent((event) => {
     events.push(event.type);
   });
 
-  await session.requestQueue({
-    queue: "followUp",
-    content: "pre-queued turn",
-  });
-  const steerTurn = await session.steer({
-    message: userMessage("q1", "steer"),
-  });
-  await session.prompt({ message: userMessage("q2", "ask again") });
-  const state = await session.getState();
+  const turn = await session.prompt({ message: userMessage("u1", "hi") });
+  const entries = await store.readAll(sessionPath);
 
-  unsubscribe();
+  expect(turn.events.some((event) => event.type === "text_delta")).toBeTrue();
+  expect(events.includes("done")).toBeTrue();
+  expect(entries.at(0)?.type).toBe("user");
+  expect(entries.at(1)?.type).toBe("assistant");
+  expect(entries.at(1)?.data.content.at(0)?.text).toBe("hello world");
+});
 
-  expect(events.at(0)).toBe("agent_start");
-  expect(events.some((event) => event === "done")).toBeTrue();
-  expect(steerTurn.finalState.sessionId).toBe("integration-session");
-  expect(state.queueDepth.followUp).toBe(0);
-  expect(state.queueDepth.steer).toBe(0);
-  expect(linearized.some((entry) => entry.type === "assistant")).toBeTrue();
+test("integration: tool call executes, appends result, and continues generation", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-bun-effect-integration-"));
+  const sessionPath = join(root, "session.jsonl");
+  const store = createSessionStore();
+  const tools = createToolRegistry();
+
+  tools.register({
+    name: "echo",
+    description: "echo input",
+    async run(_context, invocation: ToolInvocation) {
+      return {
+        content: {
+          type: "toolResult",
+          role: "tool",
+          id: `tool-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          toolCallId: "call-1",
+          toolName: invocation.name,
+          content: [{ type: "text", text: String(invocation.input.value ?? "") }],
+        },
+      };
+    },
+  });
+
+  const provider = new ScriptedProvider((context) => {
+    const hasToolResult = context.some((message) => message.type === "toolResult");
+    if (!hasToolResult) {
+      return [
+        { type: "start", payload: "start" },
+        { type: "toolcall_start", payload: "echo" },
+        {
+          type: "toolcall_delta",
+          payload: JSON.stringify({ name: "echo", input: { value: "from-tool" } }),
+        },
+        {
+          type: "toolcall_end",
+          payload: JSON.stringify({ name: "echo", input: { value: "from-tool" } }),
+        },
+      ];
+    }
+
+    return [
+      { type: "start", payload: "resume" },
+      { type: "text_delta", payload: "tool complete" },
+      { type: "done", payload: "done" },
+    ];
+  });
+
+  const session = await createAgentSession({
+    sessionId: "integration-tools",
+    contextWindowTokens: 4096,
+    reserveTokens: 256,
+    autoCompaction: true,
+    sessionStore: store,
+    sessionPath,
+    llmProvider: provider,
+    toolRegistry: tools,
+  });
+
+  await session.prompt({ message: userMessage("u1", "run tool") });
+  const entries = await store.readAll(sessionPath);
+
+  expect(entries.some((entry) => entry.type === "toolResult")).toBeTrue();
+  expect(entries.some((entry) => entry.type === "assistant")).toBeTrue();
+  expect(entries.at(-1)?.data.content.at(0)?.text).toBe("tool complete");
+});
+
+test("integration: compaction triggers at token boundary and writes summary entry", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-bun-effect-integration-"));
+  const sessionPath = join(root, "session.jsonl");
+  const store = createSessionStore();
+
+  const provider = new ScriptedProvider(() => [
+    { type: "start", payload: "start" },
+    { type: "text_delta", payload: "short response" },
+    { type: "done", payload: "done" },
+  ]);
+
+  const session = await createAgentSession({
+    sessionId: "integration-compaction",
+    contextWindowTokens: 12,
+    reserveTokens: 2,
+    autoCompaction: true,
+    sessionStore: store,
+    sessionPath,
+    llmProvider: provider,
+  });
+
+  await session.prompt({
+    message: userMessage("u1", "This user message is intentionally long to cross token budget."),
+  });
+
+  const entries = await store.readAll(sessionPath);
+  const compaction = entries.find((entry) => entry.type === "compactionSummary");
+
+  expect(compaction).toBeDefined();
+  expect(compaction?.data.content.at(0)?.text.includes("Compacted")).toBeTrue();
+  expect(entries.at(-1)?.type).toBe("compactionSummary");
 });
