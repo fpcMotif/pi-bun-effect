@@ -26,8 +26,9 @@ test("pod manager startModel prevents command injection", async () => {
   const maliciousModelId = "model-name; cat /etc/passwd";
   await manager.startModel(maliciousModelId);
 
-  expect(executedCommand!).toBeInstanceOf(Array);
-  expect(executedCommand!).toEqual([
+  expect(executedCommand).not.toBeNull();
+  expect(executedCommand).toBeInstanceOf(Array);
+  expect(executedCommand).toEqual([
     "python3",
     "-m",
     "vllm.entrypoints.openai.api_server",
