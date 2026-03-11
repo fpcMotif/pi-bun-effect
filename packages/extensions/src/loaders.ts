@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   Capability,
@@ -62,7 +62,9 @@ export function parseExtensionManifest(input: unknown): ExtensionManifest {
 
   const parsedCapabilities = asStringArray(capabilities) as Capability[];
   if (parsedCapabilities.length === 0) {
-    throw new Error("invalid manifest: capabilities must be a non-empty string array");
+    throw new Error(
+      "invalid manifest: capabilities must be a non-empty string array",
+    );
   }
 
   return {
@@ -74,7 +76,9 @@ export function parseExtensionManifest(input: unknown): ExtensionManifest {
   };
 }
 
-export function parseManifestFromPackageJson(packageJsonText: string): ExtensionManifest {
+export function parseManifestFromPackageJson(
+  packageJsonText: string,
+): ExtensionManifest {
   const parsed = JSON.parse(packageJsonText) as Record<string, unknown>;
   const extension = parsed.extension;
   if (!isRecord(extension)) {
@@ -83,24 +87,33 @@ export function parseManifestFromPackageJson(packageJsonText: string): Extension
   return parseExtensionManifest(extension);
 }
 
-export function loadFromPath(path: string): ExtensionSource {
+export async function loadFromPath(path: string): Promise<ExtensionSource> {
   const manifestPath = join(path, "extension.json");
   const packagePath = join(path, "package.json");
 
-  if (existsSync(manifestPath)) {
-    const content = readFileSync(manifestPath, "utf8");
+  try {
+    const content = await readFile(manifestPath, "utf8");
     return {
       type: "path",
       reference: path,
       manifest: parseExtensionManifest(JSON.parse(content)),
     };
+  } catch (err: any) {
+    if (err.code !== "ENOENT") {
+      throw err;
+    }
   }
 
-  if (!existsSync(packagePath)) {
-    throw new Error(`no manifest found at ${path}`);
+  let packageContent: string;
+  try {
+    packageContent = await readFile(packagePath, "utf8");
+  } catch (err: any) {
+    if (err.code === "ENOENT") {
+      throw new Error(`no manifest found at ${path}`);
+    }
+    throw err;
   }
 
-  const packageContent = readFileSync(packagePath, "utf8");
   return {
     type: "path",
     reference: path,
@@ -119,7 +132,10 @@ export function loadFromNpm(
   };
 }
 
-export function loadFromGit(url: string, manifestText: string): ExtensionSource {
+export function loadFromGit(
+  url: string,
+  manifestText: string,
+): ExtensionSource {
   return {
     type: "git",
     reference: url,
