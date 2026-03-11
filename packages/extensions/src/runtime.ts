@@ -45,7 +45,10 @@ export interface RuntimeServices {
     context: ExtensionContext,
     args: string[],
   ): Promise<unknown>;
-  requestPrompt(prompt: string, metadata?: Record<string, unknown>): Promise<string>;
+  requestPrompt(
+    prompt: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<string>;
   listTools(): string[];
   listCommands(): string[];
 }
@@ -82,7 +85,10 @@ export class ExtensionRuntimeServices implements RuntimeServices {
     this.promptCallback = callback;
   }
 
-  async dispatchEvent(event: RuntimeEvent, context: ExtensionContext): Promise<void> {
+  async dispatchEvent(
+    event: RuntimeEvent,
+    context: ExtensionContext,
+  ): Promise<void> {
     const handlers = this.hooks.get(event.type) ?? [];
     for (const hook of handlers) {
       await hook.handler(event, context);

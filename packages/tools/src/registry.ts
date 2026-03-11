@@ -20,7 +20,7 @@ function stripOuterQuotes(input: string): string {
   const trimmed = input.trim();
   if (
     (trimmed.startsWith("'") && trimmed.endsWith("'"))
-    || (trimmed.startsWith('"') && trimmed.endsWith('"'))
+    || (trimmed.startsWith("\"") && trimmed.endsWith("\""))
   ) {
     return trimmed.slice(1, -1);
   }
@@ -233,7 +233,14 @@ const GREP_TOOL: ToolDefinition = {
         return makeToolResult("grep", `mock-grep:${pattern}:${path}`);
       }
 
-      const proc = Bun.spawnSync(["grep", "-rn", "-F", "--", pattern, resolved]);
+      const proc = Bun.spawnSync([
+        "grep",
+        "-rn",
+        "-F",
+        "--",
+        pattern,
+        resolved,
+      ]);
       const output = proc.stdout.toString();
       const stderr = proc.stderr.toString();
       return makeToolResult("grep", output || stderr || "no matches", {
@@ -260,7 +267,12 @@ const FIND_TOOL: ToolDefinition = {
       }
 
       const proc = Bun.spawnSync([
-        "find", resolved, "-name", pattern, "-maxdepth", "5",
+        "find",
+        resolved,
+        "-name",
+        pattern,
+        "-maxdepth",
+        "5",
       ]);
       const output = proc.stdout.toString();
       const stderr = proc.stderr.toString();
