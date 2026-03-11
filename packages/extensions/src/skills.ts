@@ -62,7 +62,8 @@ export class InMemorySkillsDiscovery implements SkillsDiscovery {
           name: String(d.name),
           isDirectory: () => d.isDirectory(),
         }));
-      } catch {
+      } catch (err) {
+        console.warn(`Failed to read extension root ${resolved}:`, err);
         continue;
       }
 
