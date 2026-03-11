@@ -99,18 +99,23 @@ function toEntry(value: unknown): JsonlSessionEntry {
   return candidate as JsonlSessionEntry;
 }
 
-function readJsonl(text: string): ParsedSession {
-  const lines = text.split(/\r?\n/).filter(Boolean);
+async function readJsonl(text: string): Promise<ParsedSession> {
+  const lines = text.split("\n");
   if (lines.length === 0) {
     throw new Error("Session file is empty");
   }
 
-  const headerLine = lines[0];
+  let headerIndex = 0;
+  while (headerIndex < lines.length && !lines[headerIndex]?.trim()) {
+    headerIndex++;
+  }
+
+  const headerLine = lines[headerIndex];
   if (headerLine === undefined) {
     throw new Error("Session file is empty");
   }
 
-  const parsedHeader = parseJsonLine(headerLine, 0);
+  const parsedHeader = parseJsonLine(headerLine, headerIndex);
   if (!isHeader(parsedHeader)) {
     throw new Error("Invalid session header");
   }
@@ -123,17 +128,26 @@ function readJsonl(text: string): ParsedSession {
   };
 
   const entries: JsonlSessionEntry[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
-    if (line === undefined) {
-      continue;
+  const BATCH_SIZE = 5000;
+  for (let i = headerIndex + 1; i < lines.length; i += BATCH_SIZE) {
+    const end = Math.min(i + BATCH_SIZE, lines.length);
+    for (let j = i; j < end; j++) {
+      const line = lines[j];
+      if (line === undefined || !line.trim()) {
+        continue;
+      }
+
+      const parsed = parseJsonLine(line, j);
+      if (parsed === null) {
+        continue;
+      }
+      entries.push(toEntry(parsed));
     }
 
-    const parsed = parseJsonLine(line, i);
-    if (parsed === null) {
-      continue;
+    // Yield to event loop to prevent blocking on large files
+    if (end < lines.length) {
+      await new Promise((resolve) => setImmediate(resolve));
     }
-    entries.push(toEntry(parsed));
   }
 
   return { header, entries };
@@ -208,7 +222,7 @@ export class JsonlSessionStore implements SessionStore {
 
   async migrate(path: string): Promise<SessionVersion> {
     const raw = await readFile(path, "utf8");
-    const parsed = readJsonl(raw);
+    const parsed = await readJsonl(raw);
     await this.migrateInternal(path, parsed);
     return 3;
   }
@@ -298,7 +312,7 @@ export class JsonlSessionStore implements SessionStore {
   private async readAllInternal(path: string): Promise<ParsedSession> {
     await this.open(path);
     const raw = await readFile(path, "utf8");
-    const parsed = readJsonl(raw);
+    const parsed = await readJsonl(raw);
     if (parsed.header.version !== 3) {
       return this.migrateInternal(path, parsed);
     }
