@@ -130,9 +130,9 @@ export async function runCli(
   }
 
   if (parsed.mode === "interactive" && parsed.prompt === undefined) {
-    console.log("pi-bun-effect interactive mode");
-    console.log("stdin: interactive loop not yet implemented in bootstrap");
-    return 0;
+    console.error("pi-bun-effect interactive mode");
+    console.error("stdin: interactive loop not yet implemented in bootstrap");
+    return 1;
   }
 
   const fallback = {

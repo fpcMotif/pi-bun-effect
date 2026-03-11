@@ -30,11 +30,17 @@ export interface PodCommandRunner {
   run(command: string): Promise<CommandResult>;
 }
 
-function defaultRunner(command: string): Promise<CommandResult> {
+const VALID_HOSTNAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+
+function isValidHostname(host: string): boolean {
+  return VALID_HOSTNAME.test(host) && host.length <= 253;
+}
+
+function defaultRunner(command: string[]): Promise<CommandResult> {
   if (typeof Bun === "undefined") {
     return Promise.resolve({ stdout: "", stderr: "", exitCode: 0 });
   }
-  const process = Bun.spawnSync(["sh", "-c", command]);
+  const process = Bun.spawnSync(command);
   return Promise.resolve({
     stdout: process.stdout.toString(),
     stderr: process.stderr.toString(),
@@ -54,6 +60,9 @@ export class InMemoryPodManager implements PodManager {
   ) {}
 
   async setup(config: PodConfig): Promise<void> {
+    if (!isValidHostname(config.sshHost)) {
+      throw new Error(`Invalid SSH host: ${config.sshHost}`);
+    }
     this.podConfig = {
       name: config.name,
       provider: config.provider,
@@ -67,10 +76,9 @@ export class InMemoryPodManager implements PodManager {
     if (!this.podConfig) {
       throw new Error("pod not configured");
     }
-    const command = this.renderStartCommand(modelId);
     const result = this.options.commandRunner
-      ? await this.options.commandRunner.run(command)
-      : await defaultRunner(command);
+      ? await this.options.commandRunner.run(this.renderStartCommand(modelId))
+      : await defaultRunner(this.buildStartArgs(modelId));
     if (result.exitCode !== 0) {
       throw new Error(`start model failed: ${result.stderr || result.stdout}`);
     }
@@ -105,11 +113,37 @@ export class InMemoryPodManager implements PodManager {
     if (!this.podConfig) {
       throw new Error("pod not configured");
     }
-    return `python3 -m vllm.entrypoints.openai.api_server --model ${
-      JSON.stringify(
-        modelId,
-      )
-    } --host 0.0.0.0 --port 11434 --max-num-seqs 32`;
+    const safeModelId = modelId.replace(/[^a-zA-Z0-9._:/-]/g, "");
+    if (!safeModelId || safeModelId !== modelId) {
+      throw new Error(`Invalid model ID: ${modelId}`);
+    }
+    return [
+      "python3", "-m", "vllm.entrypoints.openai.api_server",
+      "--model", JSON.stringify(safeModelId),
+      "--host", "0.0.0.0",
+      "--port", "11434",
+      "--max-num-seqs", "32",
+    ].join(" ");
+  }
+
+  private buildStartArgs(modelId: string): string[] {
+    if (!this.podConfig) {
+      throw new Error("pod not configured");
+    }
+
+    return [
+      "python3",
+      "-m",
+      "vllm.entrypoints.openai.api_server",
+      "--model",
+      modelId,
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "11434",
+      "--max-num-seqs",
+      "32",
+    ];
   }
 }
 

@@ -23,6 +23,7 @@
     "ci:smoke": "bun run build && bun run test && bun run artifacts:print"
   },
   "devDependencies": {
+    "@types/bun": "^1.3.10",
     "dprint": "^0.52.0",
     "oxlint": "^1.51.0"
   }

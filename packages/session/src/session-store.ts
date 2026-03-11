@@ -1,5 +1,11 @@
 import { type AgentMessage, isAgentMessage } from "@pi-bun-effect/core";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  access,
+  appendFile,
+  mkdir,
+  readFile,
+  writeFile,
+} from "node:fs/promises";
 import { dirname } from "node:path";
 
 export type SessionVersion = 1 | 2 | 3;
@@ -133,14 +139,6 @@ function readJsonl(text: string): ParsedSession {
   return { header, entries };
 }
 
-function stringifyHeader(header: SessionHeader): string {
-  return JSON.stringify(header);
-}
-
-function stringifyEntry(entry: JsonlSessionEntry): string {
-  return JSON.stringify(entry);
-}
-
 export class JsonlSessionStore implements SessionStore {
   async open(path: string): Promise<void> {
     const directory = dirname(path);
@@ -154,7 +152,7 @@ export class JsonlSessionStore implements SessionStore {
         createdAt: nowIso(),
         updatedAt: nowIso(),
       };
-      await writeFile(path, `${stringifyHeader(header)}\n`, "utf8");
+      await writeFile(path, `${JSON.stringify(header)}\n`, "utf8");
     }
   }
 
@@ -175,7 +173,7 @@ export class JsonlSessionStore implements SessionStore {
       id: entry.id ?? makeId(),
       timestamp: entry.timestamp ?? nowIso(),
     };
-    await appendLine(path, stringifyEntry(prepared));
+    await appendLine(path, JSON.stringify(prepared));
     return prepared;
   }
 
@@ -183,24 +181,35 @@ export class JsonlSessionStore implements SessionStore {
     return (await this.readAllInternal(path)).entries;
   }
 
-  async migrate(path: string): Promise<SessionVersion> {
-    const raw = await readFile(path, "utf8");
-    const { header, entries } = readJsonl(raw);
-
-    if (header.version === 3) {
-      return 3;
+  private async migrateInternal(
+    path: string,
+    parsed: ParsedSession,
+  ): Promise<ParsedSession> {
+    if (parsed.header.version === 3) {
+      return parsed;
     }
 
     const migrated: SessionHeader = {
       version: 3,
-      id: header.id,
-      createdAt: header.createdAt,
+      id: parsed.header.id,
+      createdAt: parsed.header.createdAt,
       updatedAt: nowIso(),
     };
-    const body = `${stringifyHeader(migrated)}\n${
-      entries.map(stringifyEntry).join("\n")
-    }${entries.length > 0 ? "\n" : ""}`;
+    const body = `${JSON.stringify(migrated)}\n${
+      parsed.entries.map((entry) => JSON.stringify(entry)).join("\n")
+    }${parsed.entries.length > 0 ? "\n" : ""}`;
     await writeFile(path, body, "utf8");
+
+    return {
+      header: migrated,
+      entries: parsed.entries,
+    };
+  }
+
+  async migrate(path: string): Promise<SessionVersion> {
+    const raw = await readFile(path, "utf8");
+    const parsed = readJsonl(raw);
+    await this.migrateInternal(path, parsed);
     return 3;
   }
 
@@ -271,7 +280,10 @@ export class JsonlSessionStore implements SessionStore {
     entryId: string,
   ): Promise<JsonlSessionEntry[]> {
     const entries = await this.readAllInternal(path);
-    const map = new Map(entries.entries.map((entry) => [entry.id, entry]));
+    const map = new Map<string, JsonlSessionEntry>();
+    for (const entry of entries.entries) {
+      map.set(entry.id, entry);
+    }
     const chain: JsonlSessionEntry[] = [];
     let current: JsonlSessionEntry | undefined = map.get(entryId);
 
@@ -288,8 +300,7 @@ export class JsonlSessionStore implements SessionStore {
     const raw = await readFile(path, "utf8");
     const parsed = readJsonl(raw);
     if (parsed.header.version !== 3) {
-      await this.migrate(path);
-      return this.readAllInternal(path);
+      return this.migrateInternal(path, parsed);
     }
     return parsed;
   }
@@ -300,7 +311,5 @@ export function createSessionStore(_rootDirectory = ""): SessionStore {
 }
 
 async function appendLine(path: string, line: string): Promise<void> {
-  const current = await readFile(path, "utf8");
-  const content = `${current.trimEnd()}\n${line}\n`;
-  await writeFile(path, content, "utf8");
+  await appendFile(path, `${line}\n`, "utf8");
 }

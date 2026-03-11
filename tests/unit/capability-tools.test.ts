@@ -12,12 +12,14 @@ import { join } from "node:path";
 function makeContext(
   capabilities: Capability[],
   trust: TrustDecision = "trusted",
+  sandboxRoot?: string,
 ): ToolContext {
   return {
     sessionId: "cap-test",
     extensionId: "ext-cap",
     capabilities: new Set(capabilities),
     trust,
+    sandboxRoot,
   };
 }
 
@@ -39,6 +41,18 @@ test("capability enforcement denies tool execution without matching capability",
     input: { command: "printf 'cap-ok'" },
   });
   expect(result.content.content.at(0)?.text).toContain("cap-ok");
+});
+
+test("trust enforcement blocks bash until the extension is trusted", async () => {
+  const registry = createToolRegistry();
+  registerBuiltinTools(registry);
+
+  await expect(
+    registry.execute(makeContext(["tool:bash"], "pending"), {
+      name: "bash",
+      input: { command: "echo denied" },
+    }),
+  ).rejects.toThrow("trust denied: pending cannot use tool:bash");
 });
 
 test("capability enforcement allows all tools with full capability set", async () => {
@@ -81,11 +95,11 @@ test("grep tool searches file contents", async () => {
 
   const registry = createToolRegistry();
   registerBuiltinTools(registry);
-  const ctx = makeContext(["tool:grep"]);
+  const ctx = makeContext(["tool:grep"], "trusted", root);
 
   const result = await registry.execute(ctx, {
     name: "grep",
-    input: { pattern: "needle", path: root },
+    input: { pattern: "needle", path: "." },
   });
   expect(result.content.content.at(0)?.text).toContain("needle");
   rmSync(root, { recursive: true, force: true });
@@ -98,11 +112,11 @@ test("find tool finds files by pattern", async () => {
 
   const registry = createToolRegistry();
   registerBuiltinTools(registry);
-  const ctx = makeContext(["tool:find"]);
+  const ctx = makeContext(["tool:find"], "trusted", root);
 
   const result = await registry.execute(ctx, {
     name: "find",
-    input: { pattern: "*.md", path: root },
+    input: { pattern: "*.md", path: "." },
   });
   expect(result.content.content.at(0)?.text).toContain("target.md");
   rmSync(root, { recursive: true, force: true });
@@ -115,14 +129,38 @@ test("ls tool lists directory contents", async () => {
 
   const registry = createToolRegistry();
   registerBuiltinTools(registry);
-  const ctx = makeContext(["tool:ls"]);
+  const ctx = makeContext(["tool:ls"], "trusted", root);
 
   const result = await registry.execute(ctx, {
     name: "ls",
-    input: { path: root },
+    input: { path: "." },
   });
   const text = result.content.content.at(0)?.text ?? "";
   expect(text).toContain("file-a.txt");
   expect(text).toContain("file-b.txt");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("edit tool rejects empty find values", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-bun-effect-edit-"));
+  writeFileSync(join(root, "payload.txt"), "seed");
+
+  const registry = createToolRegistry();
+  registerBuiltinTools(registry);
+  const ctx = makeContext(["tool:edit"], "trusted", root);
+
+  const result = await registry.execute(ctx, {
+    name: "edit",
+    input: { path: "payload.txt", find: "", replace: "noop" },
+  });
+
+  expect(result.content.type).toBe("toolResult");
+  if (result.content.type !== "toolResult") {
+    throw new Error("expected toolResult");
+  }
+  expect(result.content.isError).toBeTrue();
+  expect(result.content.content.at(0)?.text).toContain(
+    "non-empty find value",
+  );
   rmSync(root, { recursive: true, force: true });
 });

@@ -34,6 +34,9 @@ export class InMemorySlackBot implements SlackBot {
   }
 
   routeEvent(event: SlackEvent): ChannelState {
+    if (!this.running) {
+      throw new Error("Bot is not running; call start() first");
+    }
     const existing = this.channels.get(event.channel) ?? {
       channelId: event.channel,
       messageCount: 0,

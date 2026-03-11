@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 export interface SearchMatch {
@@ -23,6 +23,18 @@ export interface SearchWeights {
   git: number;
 }
 
+interface SearchDocument {
+  path: string;
+  content: string;
+  indexedAt: number;
+}
+
+const DEFAULT_QUERY_WEIGHTS: SearchWeights = {
+  fuzzy: 1,
+  frecency: 0.25,
+  git: 0,
+};
+
 export function normalizeToken(input: string): string {
   return input.trim().toLowerCase();
 }
@@ -38,6 +50,54 @@ export function computeFrecency(
   return decay ** ageInHours * base;
 }
 
+function scoreFuzzyMatch(path: string, pattern: string): number {
+  const normalizedPath = normalizeToken(path);
+  const normalizedPattern = normalizeToken(pattern);
+
+  if (!normalizedPattern) {
+    return 0;
+  }
+
+  const baseName = normalizedPath.split(/[\\/]/).at(-1) ?? normalizedPath;
+  if (baseName === normalizedPattern) {
+    return 1;
+  }
+
+  if (baseName.startsWith(normalizedPattern)) {
+    return 0.9;
+  }
+
+  if (baseName.includes(normalizedPattern)) {
+    return 0.8;
+  }
+
+  const index = normalizedPath.indexOf(normalizedPattern);
+  if (index === -1) {
+    return 0;
+  }
+
+  const distance = index / Math.max(normalizedPath.length, 1);
+  return Math.max(0.25, 0.7 - distance / 2);
+}
+
+function ageInHours(indexedAt: number): number {
+  return Math.max(0, (Date.now() - indexedAt) / 3_600_000);
+}
+
+function compareMatches(a: SearchMatch, b: SearchMatch): number {
+  return b.score - a.score || a.path.localeCompare(b.path);
+}
+
+function extractSnippet(
+  content: string,
+  start: number,
+  length: number,
+): string {
+  const snippetStart = Math.max(0, start - 24);
+  const snippetEnd = Math.min(content.length, start + length + 24);
+  return content.slice(snippetStart, snippetEnd).trim();
+}
+
 export function rankPath(
   path: string,
   pattern: string,
@@ -45,19 +105,21 @@ export function rankPath(
   frecency = 1,
   isGitDirty = false,
 ): number {
-  const normalizedPath = normalizeToken(path);
-  const normalizedPattern = normalizeToken(pattern);
-  const contains = normalizedPath.includes(normalizedPattern) ? 1 : 0;
+  const fuzzyScore = scoreFuzzyMatch(path, pattern);
+  if (fuzzyScore === 0) {
+    return 0;
+  }
+
   const gitBoost = isGitDirty ? 1 : 0;
   return (
-    contains * weights.fuzzy
-    + computeFrecency(0) * weights.frecency
+    fuzzyScore * weights.fuzzy
+    + frecency * weights.frecency
     + gitBoost * weights.git
   );
 }
 
 export class InMemorySearchService implements SearchService {
-  private readonly index = new Map<string, number>();
+  private readonly index = new Map<string, SearchDocument>();
 
   private async collectFiles(root: string): Promise<string[]> {
     const resolved = resolve(root);
@@ -85,52 +147,106 @@ export class InMemorySearchService implements SearchService {
     this.index.clear();
     const files = await this.collectFiles(root);
     for (const fullPath of files) {
-      const timestamp = Date.now();
-      this.index.set(fullPath, timestamp);
+      const content = await readFile(fullPath, "utf8").catch(() => "");
+      this.index.set(fullPath, {
+        path: fullPath,
+        content,
+        indexedAt: Date.now(),
+      });
     }
   }
 
   async queryFiles(pattern: string, limit = 20): Promise<SearchMatch[]> {
+    if (limit <= 0) {
+      return [];
+    }
+
     const normalized = normalizeToken(pattern);
-    const matches = Array.from(this.index.keys())
-      .map((path) => ({
-        path,
-        score: path.toLowerCase().includes(normalized) ? 1 : 0,
-        snippet: path,
-      }))
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
-    return matches;
+    if (!normalized) {
+      return [];
+    }
+
+    const matches: SearchMatch[] = [];
+    for (const document of this.index.values()) {
+      const score = rankPath(
+        document.path,
+        normalized,
+        DEFAULT_QUERY_WEIGHTS,
+        computeFrecency(ageInHours(document.indexedAt)),
+        false,
+      );
+      if (score === 0) {
+        continue;
+      }
+
+      matches.push({
+        path: document.path,
+        score,
+        snippet: document.path,
+      });
+    }
+
+    return matches.sort(compareMatches).slice(0, limit);
   }
 
   async queryContent(query: string, limit = 20): Promise<SearchMatch[]> {
+    if (limit <= 0) {
+      return [];
+    }
+
     const normalized = normalizeToken(query);
-    const matches = Array.from(this.index.keys())
-      .map((path) => ({
-        path,
-        score: path.toLowerCase().includes(normalized) ? 1 : 0,
-        snippet: path,
-      }))
-      .filter((entry) => entry.score > 0)
-      .slice(0, limit);
-    return matches;
+    if (!normalized) {
+      return [];
+    }
+
+    const matches: SearchMatch[] = [];
+    for (const document of this.index.values()) {
+      const lowerContent = document.content.toLowerCase();
+      const matchStart = lowerContent.indexOf(normalized);
+      if (matchStart === -1) {
+        continue;
+      }
+
+      matches.push({
+        path: document.path,
+        score: 1
+          + rankPath(
+            document.path,
+            normalized,
+            DEFAULT_QUERY_WEIGHTS,
+            computeFrecency(ageInHours(document.indexedAt)),
+            false,
+          ),
+        snippet: extractSnippet(
+          document.content,
+          matchStart,
+          normalized.length,
+        ),
+      });
+    }
+
+    return matches.sort(compareMatches).slice(0, limit);
   }
 
   rank(
     pattern: string,
     weights: { fuzzy: number; frecency: number; git: number },
   ): number {
-    const best = this.index.size === 0 ? 0 : 1;
-    return (
-      rankPath(
-        Array.from(this.index.keys())[0] ?? "",
-        pattern,
-        weights,
-        1,
-        false,
-      ) * best
-    );
+    let best = 0;
+    for (const document of this.index.values()) {
+      best = Math.max(
+        best,
+        rankPath(
+          document.path,
+          pattern,
+          weights,
+          computeFrecency(ageInHours(document.indexedAt)),
+          false,
+        ),
+      );
+    }
+
+    return best;
   }
 }
 
