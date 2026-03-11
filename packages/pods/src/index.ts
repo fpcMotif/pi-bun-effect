@@ -118,11 +118,17 @@ export class InMemoryPodManager implements PodManager {
       throw new Error(`Invalid model ID: ${modelId}`);
     }
     return [
-      "python3", "-m", "vllm.entrypoints.openai.api_server",
-      "--model", JSON.stringify(safeModelId),
-      "--host", "0.0.0.0",
-      "--port", "11434",
-      "--max-num-seqs", "32",
+      "python3",
+      "-m",
+      "vllm.entrypoints.openai.api_server",
+      "--model",
+      JSON.stringify(safeModelId),
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "11434",
+      "--max-num-seqs",
+      "32",
     ].join(" ");
   }
 
