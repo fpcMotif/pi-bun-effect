@@ -1,16 +1,20 @@
 import {
   createSlackBot,
   InMemorySlackBot,
+  type SlackConfig,
   type SlackEvent,
 } from "@pi-bun-effect/slack-bot";
 import { beforeEach, describe, expect, test } from "bun:test";
 
 describe("InMemorySlackBot", () => {
   let bot: InMemorySlackBot;
+  const mockConfig: SlackConfig = {
+    token: "test-token",
+    socketMode: true,
+  };
 
   beforeEach(async () => {
     bot = createSlackBot();
-    await bot.start({ token: "test-token", socketMode: true });
   });
 
   test("createSlackBot returns an instance of InMemorySlackBot", () => {
@@ -18,23 +22,25 @@ describe("InMemorySlackBot", () => {
   });
 
   test("start sets running to true", async () => {
+    await bot.start(mockConfig);
     // @ts-expect-error testing private runtime state
     expect(bot.running).toBeTrue();
   });
 
   test("stop sets running to false", async () => {
+    await bot.start(mockConfig);
     await bot.stop();
     // @ts-expect-error testing private runtime state
     expect(bot.running).toBeFalse();
   });
 
   test("routeEvent throws when bot is not running", async () => {
-    await bot.stop();
     expect(() => bot.routeEvent({ channel: "C1", user: "U1", text: "msg" }))
       .toThrow("Bot is not running");
   });
 
-  test("routeEvent creates new channel state on first event", () => {
+  test("routeEvent creates new channel state on first event", async () => {
+    await bot.start(mockConfig);
     const event: SlackEvent = {
       channel: "C12345",
       user: "U123",
@@ -48,7 +54,8 @@ describe("InMemorySlackBot", () => {
     });
   });
 
-  test("routeEvent updates existing channel state", () => {
+  test("routeEvent updates existing channel state", async () => {
+    await bot.start(mockConfig);
     bot.routeEvent({
       channel: "C12345",
       user: "U123",
@@ -68,7 +75,8 @@ describe("InMemorySlackBot", () => {
     });
   });
 
-  test("routeEvent handles multiple channels independently", () => {
+  test("routeEvent handles multiple channels independently", async () => {
+    await bot.start(mockConfig);
     const state1 = bot.routeEvent({ channel: "C1", user: "U1", text: "msg 1" });
     const state2 = bot.routeEvent({ channel: "C2", user: "U2", text: "msg 2" });
 
@@ -78,11 +86,13 @@ describe("InMemorySlackBot", () => {
     expect(state2.messageCount).toBe(1);
   });
 
-  test("listChannels returns an empty array initially", () => {
+  test("listChannels returns an empty array initially", async () => {
+    await bot.start(mockConfig);
     expect(bot.listChannels()).toEqual([]);
   });
 
-  test("listChannels returns unique channel ids after events", () => {
+  test("listChannels returns unique channel ids after events", async () => {
+    await bot.start(mockConfig);
     bot.routeEvent({ channel: "C1", user: "U1", text: "msg" });
     bot.routeEvent({ channel: "C2", user: "U2", text: "msg" });
     bot.routeEvent({ channel: "C1", user: "U3", text: "msg2" });
