@@ -302,8 +302,7 @@ export class InMemoryAgentSessionFactory implements AgentSessionFactory {
     return new InMemoryAgentSession(config);
   }
 
-  async stop(sessionId: string): Promise<void> {
-    await Promise.resolve(sessionId);
+  async stop(_sessionId: string): Promise<void> {
   }
 }
 
