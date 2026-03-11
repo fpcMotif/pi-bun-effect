@@ -37,7 +37,7 @@ test("conformance: runtime services register commands/hooks and expose ui prompt
   const context = {
     extensionId: "ext-runtime",
     sessionId: "s1",
-    capabilities: new Set(),
+    capabilities: new Set<import("@pi-bun-effect/extensions").Capability>(),
   };
 
   const commandResult = await runtime.executeCommand("hello", context, [
