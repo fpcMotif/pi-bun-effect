@@ -146,14 +146,16 @@ export class InMemorySearchService implements SearchService {
   async buildIndex(root: string): Promise<void> {
     this.index.clear();
     const files = await this.collectFiles(root);
-    for (const fullPath of files) {
-      const content = await readFile(fullPath, "utf8").catch(() => "");
-      this.index.set(fullPath, {
-        path: fullPath,
-        content,
-        indexedAt: Date.now(),
-      });
-    }
+    await Promise.all(
+      files.map(async (fullPath) => {
+        const content = await readFile(fullPath, "utf8").catch(() => "");
+        this.index.set(fullPath, {
+          path: fullPath,
+          content,
+          indexedAt: Date.now(),
+        });
+      }),
+    );
   }
 
   async queryFiles(pattern: string, limit = 20): Promise<SearchMatch[]> {
