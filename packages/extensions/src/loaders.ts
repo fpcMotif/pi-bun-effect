@@ -62,7 +62,9 @@ export function parseExtensionManifest(input: unknown): ExtensionManifest {
 
   const parsedCapabilities = asStringArray(capabilities) as Capability[];
   if (parsedCapabilities.length === 0) {
-    throw new Error("invalid manifest: capabilities must be a non-empty string array");
+    throw new Error(
+      "invalid manifest: capabilities must be a non-empty string array",
+    );
   }
 
   return {
@@ -74,7 +76,9 @@ export function parseExtensionManifest(input: unknown): ExtensionManifest {
   };
 }
 
-export function parseManifestFromPackageJson(packageJsonText: string): ExtensionManifest {
+export function parseManifestFromPackageJson(
+  packageJsonText: string,
+): ExtensionManifest {
   const parsed = JSON.parse(packageJsonText) as Record<string, unknown>;
   const extension = parsed.extension;
   if (!isRecord(extension)) {
@@ -119,7 +123,10 @@ export function loadFromNpm(
   };
 }
 
-export function loadFromGit(url: string, manifestText: string): ExtensionSource {
+export function loadFromGit(
+  url: string,
+  manifestText: string,
+): ExtensionSource {
   return {
     type: "git",
     reference: url,
