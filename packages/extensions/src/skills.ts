@@ -53,7 +53,7 @@ export class InMemorySkillsDiscovery implements SkillsDiscovery {
     this.registry.clear();
     const results: SkillMetadata[] = [];
 
-    for (const root of roots) {
+    await Promise.all(roots.map(async (root) => {
       const resolved = resolve(root);
       let items: { name: string; isDirectory(): boolean }[];
       try {
@@ -63,25 +63,29 @@ export class InMemorySkillsDiscovery implements SkillsDiscovery {
           isDirectory: () => d.isDirectory(),
         }));
       } catch {
-        continue;
+        return;
       }
 
-      for (const entry of items) {
-        if (!entry.isDirectory()) continue;
+      await Promise.all(items.map(async (entry) => {
+        if (!entry.isDirectory()) return;
         const dirPath = join(resolved, entry.name);
 
-        for (const [marker, type] of Object.entries(MARKER_FILES)) {
-          const markerPath = join(dirPath, marker);
-          try {
-            const meta = await parseMetadata(markerPath, type);
-            this.registry.set(meta.name, meta);
-            results.push(meta);
-          } catch {
-            // marker not found, skip
-          }
-        }
-      }
-    }
+        const markerPromises = Object.entries(MARKER_FILES).map(
+          async ([marker, type]) => {
+            const markerPath = join(dirPath, marker);
+            try {
+              const meta = await parseMetadata(markerPath, type);
+              this.registry.set(meta.name, meta);
+              results.push(meta);
+            } catch {
+              // marker not found, skip
+            }
+          },
+        );
+
+        await Promise.all(markerPromises);
+      }));
+    }));
 
     return results;
   }

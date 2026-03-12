@@ -1,3 +1,4 @@
+import { expect, test } from "bun:test";
 import {
   checkActivationPolicy,
   createPolicyEngine,
@@ -8,7 +9,6 @@ import {
   loadFromGit,
   loadFromNpm,
 } from "../../packages/extensions/src/index";
-import { expect, test } from "bun:test";
 
 test("conformance: runtime services register commands/hooks and expose ui prompt callback", async () => {
   const runtime = createRuntimeServices();
@@ -40,12 +40,16 @@ test("conformance: runtime services register commands/hooks and expose ui prompt
     capabilities: new Set(),
   };
 
-  const commandResult = await runtime.executeCommand("hello", context, ["world"]);
+  const commandResult = await runtime.executeCommand("hello", context, [
+    "world",
+  ]);
   await runtime.dispatchEvent(
     { type: "session:start", timestamp: new Date().toISOString() },
     context,
   );
-  const promptResult = await runtime.requestPrompt("continue?", { kind: "confirm" });
+  const promptResult = await runtime.requestPrompt("continue?", {
+    kind: "confirm",
+  });
 
   expect(commandResult).toBe("world");
   expect(promptResult).toBe("approved");
