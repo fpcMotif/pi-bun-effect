@@ -14,7 +14,6 @@ interface ServerHandle {
 
 export class InMemoryArtifactServer implements ArtifactServer {
   private server: ServerHandle | null = null;
-  public port: number | null = null;
 
   async start(config: ArtifactServerConfig): Promise<void> {
     if (typeof Bun === "undefined") {
@@ -33,16 +32,14 @@ export class InMemoryArtifactServer implements ArtifactServer {
       },
     });
 
-    this.port = server.port ?? config.port;
     this.server = {
-      close: () => server.stop(true),
+      close: () => server.stop(),
     };
   }
 
   async stop(): Promise<void> {
     this.server?.close();
     this.server = null;
-    this.port = null;
   }
 }
 

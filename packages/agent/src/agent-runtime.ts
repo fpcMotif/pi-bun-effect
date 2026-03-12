@@ -1,7 +1,6 @@
 import type {
   AgentEvent,
   AgentMessage,
-  QueueBehavior,
   QueueRequest,
 } from "@pi-bun-effect/core";
 
@@ -48,7 +47,6 @@ export interface AgentSessionFactory {
 }
 
 type Listener = (event: AgentEvent) => void;
-type TurnMode = "prompt" | QueueBehavior;
 
 function makeId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -59,10 +57,6 @@ function makeId(): string {
 
 function nowIso(): string {
   return new Date().toISOString();
-}
-
-function waitForTurnWindow(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 export function compactionCutPoint<
@@ -87,7 +81,11 @@ export function compactionCutPoint<
     return cut;
   }
 
-  if (prior?.role === "tool" && prior.type === "toolResult") {
+  if (
+    prior?.type === "toolResult"
+    && prior.role === "tool"
+    && prior.type === "toolResult"
+  ) {
     return cut;
   }
 
@@ -140,14 +138,18 @@ export class InMemoryAgentSession implements AgentSession {
   }
 
   async requestQueue(request: QueueRequest): Promise<void> {
-    this.pending.push(request);
-    this.bumpQueueDepth(request.queue, 1);
+    if (request.queue === "steer") {
+      this.queueDepth.steer += 1;
+      this.pending.push(request);
+    } else {
+      this.queueDepth.followUp += 1;
+      this.pending.push(request);
+    }
   }
 
   async cancelCurrentTurn(): Promise<void> {
     if (this.running) {
       this.running = false;
-      this.state.isRunning = false;
       this.emit({
         type: "abort",
         sessionId: this.state.sessionId,
@@ -175,7 +177,10 @@ export class InMemoryAgentSession implements AgentSession {
   }
 
   async getState(): Promise<AgentState> {
-    return this.snapshotState();
+    return {
+      ...this.state,
+      queueDepth: { ...this.queueDepth },
+    };
   }
 
   onEvent(listener: Listener): () => void {
@@ -186,11 +191,10 @@ export class InMemoryAgentSession implements AgentSession {
   }
 
   private async executeTurn(
-    mode: TurnMode,
+    mode: string,
     sourceId: string,
   ): Promise<TurnResult> {
     const turnId = makeId();
-    this.running = true;
     this.state.currentTurnId = turnId;
     this.state.isRunning = true;
 
@@ -214,19 +218,6 @@ export class InMemoryAgentSession implements AgentSession {
         at: nowIso(),
         text: `mode=${mode}`,
       },
-    ];
-
-    for (const event of events) {
-      this.emit(event);
-    }
-
-    await waitForTurnWindow();
-    if (!this.running) {
-      this.completeQueuedTurn();
-      return { events, finalState: this.snapshotState() };
-    }
-
-    const completionEvents: AgentEvent[] = [
       {
         type: "text_delta",
         sessionId: this.state.sessionId,
@@ -250,50 +241,32 @@ export class InMemoryAgentSession implements AgentSession {
       } as AgentEvent,
     ];
 
-    for (const event of completionEvents) {
-      events.push(event);
+    for (const event of events) {
       this.emit(event);
     }
 
-    this.running = false;
     this.state.isRunning = false;
-    this.completeQueuedTurn();
+    if (this.pending.length > 0) {
+      const request = this.pending.shift();
+      if (request?.queue === "steer") {
+        this.queueDepth.steer -= 1;
+      } else {
+        this.queueDepth.followUp -= 1;
+      }
+    }
 
-    return { events, finalState: this.snapshotState() };
+    this.state.queueDepth = {
+      steer: this.queueDepth.steer,
+      followUp: this.queueDepth.followUp,
+    };
+
+    return { events, finalState: this.state };
   }
 
   private emit(event: AgentEvent): void {
     for (const listener of this.listeners) {
       listener(event);
     }
-  }
-
-  private bumpQueueDepth(queue: QueueRequest["queue"], delta: number): void {
-    if (queue === "steer") {
-      this.queueDepth.steer += delta;
-    } else {
-      this.queueDepth.followUp += delta;
-    }
-    this.state.queueDepth = { ...this.queueDepth };
-  }
-
-  private completeQueuedTurn(): void {
-    this.running = false;
-    this.state.isRunning = false;
-    const next = this.pending.shift();
-    if (next) {
-      this.bumpQueueDepth(next.queue, -1);
-      return;
-    }
-
-    this.state.queueDepth = { ...this.queueDepth };
-  }
-
-  private snapshotState(): AgentState {
-    return {
-      ...this.state,
-      queueDepth: { ...this.queueDepth },
-    };
   }
 }
 

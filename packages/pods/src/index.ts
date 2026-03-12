@@ -16,7 +16,7 @@ export interface PodManager {
   stopModel(modelId: string): Promise<void>;
   listModels(): Promise<string[]>;
   getEndpoint(modelId: string): string;
-  renderStartCommand(modelId: string): string;
+  renderStartCommand(modelId: string): string[];
   getPodConfig(): Promise<PodConfig | null>;
 }
 
@@ -27,13 +27,7 @@ export interface CommandResult {
 }
 
 export interface PodCommandRunner {
-  run(command: string): Promise<CommandResult>;
-}
-
-const VALID_HOSTNAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
-
-function isValidHostname(host: string): boolean {
-  return VALID_HOSTNAME.test(host) && host.length <= 253;
+  run(command: string[]): Promise<CommandResult>;
 }
 
 function defaultRunner(command: string[]): Promise<CommandResult> {
@@ -60,9 +54,6 @@ export class InMemoryPodManager implements PodManager {
   ) {}
 
   async setup(config: PodConfig): Promise<void> {
-    if (!isValidHostname(config.sshHost)) {
-      throw new Error(`Invalid SSH host: ${config.sshHost}`);
-    }
     this.podConfig = {
       name: config.name,
       provider: config.provider,
@@ -76,9 +67,10 @@ export class InMemoryPodManager implements PodManager {
     if (!this.podConfig) {
       throw new Error("pod not configured");
     }
+    const command = this.renderStartCommand(modelId);
     const result = this.options.commandRunner
-      ? await this.options.commandRunner.run(this.renderStartCommand(modelId))
-      : await defaultRunner(this.buildStartArgs(modelId));
+      ? await this.options.commandRunner.run(command)
+      : await defaultRunner(command);
     if (result.exitCode !== 0) {
       throw new Error(`start model failed: ${result.stderr || result.stdout}`);
     }
@@ -109,28 +101,14 @@ export class InMemoryPodManager implements PodManager {
     }`;
   }
 
-  renderStartCommand(modelId: string): string {
+  renderStartCommand(modelId: string): string[] {
     if (!this.podConfig) {
       throw new Error("pod not configured");
     }
-    const safeModelId = modelId.replace(/[^a-zA-Z0-9._:/-]/g, "");
-    if (!safeModelId || safeModelId !== modelId) {
+    // simple safe list to prevent injection via modelId
+    if (!/^[a-zA-Z0-9_.-]+$/.test(modelId)) {
       throw new Error(`Invalid model ID: ${modelId}`);
     }
-    return [
-      "python3", "-m", "vllm.entrypoints.openai.api_server",
-      "--model", JSON.stringify(safeModelId),
-      "--host", "0.0.0.0",
-      "--port", "11434",
-      "--max-num-seqs", "32",
-    ].join(" ");
-  }
-
-  private buildStartArgs(modelId: string): string[] {
-    if (!this.podConfig) {
-      throw new Error("pod not configured");
-    }
-
     return [
       "python3",
       "-m",
