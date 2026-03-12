@@ -72,13 +72,24 @@ export class InMemoryPodManager implements PodManager {
     };
   }
 
+  private validateModelId(modelId: string): string {
+    const safeModelId = modelId.replace(/[^a-zA-Z0-9._:/-]/g, "");
+    if (!safeModelId || safeModelId !== modelId) {
+      throw new Error(`Invalid model ID: ${modelId}`);
+    }
+    return safeModelId;
+  }
+
   async startModel(modelId: string): Promise<void> {
     if (!this.podConfig) {
       throw new Error("pod not configured");
     }
+    const safeModelId = this.validateModelId(modelId);
     const result = this.options.commandRunner
-      ? await this.options.commandRunner.run(this.renderStartCommand(modelId))
-      : await defaultRunner(this.buildStartArgs(modelId));
+      ? await this.options.commandRunner.run(
+        this.renderStartCommand(safeModelId),
+      )
+      : await defaultRunner(this.buildStartArgs(safeModelId));
     if (result.exitCode !== 0) {
       throw new Error(`start model failed: ${result.stderr || result.stdout}`);
     }
@@ -113,16 +124,19 @@ export class InMemoryPodManager implements PodManager {
     if (!this.podConfig) {
       throw new Error("pod not configured");
     }
-    const safeModelId = modelId.replace(/[^a-zA-Z0-9._:/-]/g, "");
-    if (!safeModelId || safeModelId !== modelId) {
-      throw new Error(`Invalid model ID: ${modelId}`);
-    }
+    const safeModelId = this.validateModelId(modelId);
     return [
-      "python3", "-m", "vllm.entrypoints.openai.api_server",
-      "--model", JSON.stringify(safeModelId),
-      "--host", "0.0.0.0",
-      "--port", "11434",
-      "--max-num-seqs", "32",
+      "python3",
+      "-m",
+      "vllm.entrypoints.openai.api_server",
+      "--model",
+      JSON.stringify(safeModelId),
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "11434",
+      "--max-num-seqs",
+      "32",
     ].join(" ");
   }
 

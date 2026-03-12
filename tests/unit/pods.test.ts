@@ -77,6 +77,14 @@ describe("InMemoryPodManager", () => {
     );
   });
 
+  test("startModel throws error for malicious modelId inputs", async () => {
+    await manager.setup(validConfig);
+    const maliciousModelId = "bad\"; touch /tmp/pwned #";
+    await expect(manager.startModel(maliciousModelId)).rejects.toThrow(
+      "Invalid model ID",
+    );
+  });
+
   test("internal argv builder keeps model ids as a single argument", async () => {
     const defaultManager = new InMemoryPodManager();
     await defaultManager.setup(validConfig);
