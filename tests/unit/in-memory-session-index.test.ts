@@ -64,7 +64,17 @@ describe("InMemorySessionIndex", () => {
     expect(await index.querySessions("common", 5)).toHaveLength(5);
   });
 
-  test("createSessionIndex returns a valid SearchIndex", () => {
-    expect(createSessionIndex()).toBeInstanceOf(InMemorySessionIndex);
+  test("createSessionIndex with memory backend returns InMemorySessionIndex", async () => {
+    const idx = await createSessionIndex({ backend: "memory" });
+    expect(idx).toBeInstanceOf(InMemorySessionIndex);
+  });
+
+  test("health reports memory backend status", async () => {
+    const health = index.health();
+    expect(health.backend).toBe("memory");
+    expect(health.ready).toBe(false);
+
+    await index.init({ sessionDbPath: "/fake/path" });
+    expect(index.health().ready).toBe(true);
   });
 });

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  type Capability,
   checkActivationPolicy,
   createPolicyEngine,
   createRuntimeServices,
@@ -37,7 +38,7 @@ test("conformance: runtime services register commands/hooks and expose ui prompt
   const context = {
     extensionId: "ext-runtime",
     sessionId: "s1",
-    capabilities: new Set<import("@pi-bun-effect/extensions").Capability>(),
+    capabilities: new Set<Capability>(),
   };
 
   const commandResult = await runtime.executeCommand("hello", context, [
