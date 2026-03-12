@@ -6,7 +6,7 @@ import { readdir } from "node:fs/promises";
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { dirname } from "node:path";
+import { dirname, sep } from "node:path";
 async function resolveSafePath(
   candidate: string,
   sandboxRoot?: string,
@@ -15,7 +15,7 @@ async function resolveSafePath(
   if (!sandboxRoot) return resolved;
   const root = resolve(sandboxRoot);
 
-  if (!resolved.startsWith(root)) {
+  if (resolved !== root && !resolved.startsWith(root + sep)) {
     throw new Error(`path ${candidate} is outside sandbox`);
   }
 
@@ -23,18 +23,9 @@ async function resolveSafePath(
   while (current !== root && current !== "/") {
     try {
       const actual = await realpath(current);
-      if (!actual.startsWith(root)) {
+      if (actual !== root && !actual.startsWith(root + sep)) {
         throw new Error(`path ${candidate} escapes sandbox via symlink`);
       }
-      // If we successfully realpath a parent and it's inside the sandbox,
-      // the uncreated child is safely within the sandbox since we restrict
-      // it textually via `startsWith` initially and we know its existing parent is safe.
-      // HOWEVER, if 'actual' resolved to a different path, we MUST also check if the remaining
-      // path suffix makes the new path still inside the sandbox. Wait, if `actual` starts with
-      // `root`, then the parent is inside the sandbox.
-      // Wait, in my test, `actual` was `/tmp/.../outside` which did NOT start with `root` (`/tmp/.../sandbox`).
-      // Why did it print Success? Oh! The test threw `path escapes sandbox` inside `realpathSync` block,
-      // but it was caught by my own `catch` block in the while loop!
       break;
     } catch (e: any) {
       if (e.message && e.message.includes("escapes sandbox via symlink")) {
@@ -46,7 +37,6 @@ async function resolveSafePath(
     }
   }
 
-  // To be absolutely certain, reconstruct the resolved path if realpath succeeded
   return resolved;
 }
 

@@ -1,3 +1,4 @@
+import type { Capability } from "@pi-bun-effect/extensions";
 import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -22,7 +23,7 @@ test("tool sandbox root enforcement prevents symlink escapes on non-existent fil
   const context = {
     sessionId: "test",
     extensionId: "test",
-    capabilities: new Set(["tool:write"]),
+    capabilities: new Set(["tool:write"] as Capability[]),
     trust: "trusted" as const,
     sandboxRoot: sandbox,
   };
@@ -36,8 +37,8 @@ test("tool sandbox root enforcement prevents symlink escapes on non-existent fil
     },
   });
 
-  expect(result.content.isError).toBe(true);
-  expect(result.content.content[0].text).toContain(
+  expect((result.content as any).isError).toBe(true);
+  expect((result.content as any).content[0].text).toContain(
     "escapes sandbox via symlink",
   );
 });
