@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   Capability,
@@ -87,24 +87,33 @@ export function parseManifestFromPackageJson(
   return parseExtensionManifest(extension);
 }
 
-export function loadFromPath(path: string): ExtensionSource {
+export async function loadFromPath(path: string): Promise<ExtensionSource> {
   const manifestPath = join(path, "extension.json");
   const packagePath = join(path, "package.json");
 
-  if (existsSync(manifestPath)) {
-    const content = readFileSync(manifestPath, "utf8");
+  try {
+    const content = await readFile(manifestPath, "utf8");
     return {
       type: "path",
       reference: path,
       manifest: parseExtensionManifest(JSON.parse(content)),
     };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
   }
 
-  if (!existsSync(packagePath)) {
-    throw new Error(`no manifest found at ${path}`);
+  let packageContent: string;
+  try {
+    packageContent = await readFile(packagePath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`no manifest found at ${path}`);
+    }
+    throw error;
   }
 
-  const packageContent = readFileSync(packagePath, "utf8");
   return {
     type: "path",
     reference: path,
