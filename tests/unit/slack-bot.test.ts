@@ -1,7 +1,7 @@
 import {
   createSlackBot,
   InMemorySlackBot,
-  type SlackConfig,
+
   type SlackEvent,
 } from "@pi-bun-effect/slack-bot";
 import { beforeEach, describe, expect, test } from "bun:test";
