@@ -1,6 +1,6 @@
+import { InMemoryLogger } from "@pi-bun-effect/core";
 import { expect, test } from "bun:test";
 import { createRpcProtocol } from "./protocol";
-import { InMemoryLogger } from "@pi-bun-effect/core";
 
 test("JsonRpcProtocol logs parse errors when logger is provided", () => {
   const logger = new InMemoryLogger();

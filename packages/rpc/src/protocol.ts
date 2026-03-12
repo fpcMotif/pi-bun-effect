@@ -1,8 +1,4 @@
-import type {
-  AgentMessage,
-  Logger,
-  QueueBehavior,
-} from "@pi-bun-effect/core";
+import type { AgentMessage, Logger, QueueBehavior } from "@pi-bun-effect/core";
 
 export const RPC_COMMANDS = [
   "prompt",
