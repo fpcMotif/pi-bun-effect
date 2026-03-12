@@ -18,7 +18,10 @@ function requireString(input: Record<string, unknown>, key: string): string {
   return value;
 }
 
-function requireRecord(input: Record<string, unknown>, key: string): Record<string, unknown> {
+function requireRecord(
+  input: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> {
   const value = input[key];
   if (!isRecord(value)) {
     throw new Error(`invalid ${key}: expected object`);
@@ -67,7 +70,9 @@ export function validateSkillDefinition(input: unknown): SkillDefinition {
   };
 }
 
-export function validatePromptTemplate(input: unknown): PromptTemplateDefinition {
+export function validatePromptTemplate(
+  input: unknown,
+): PromptTemplateDefinition {
   if (!isRecord(input)) {
     throw new Error("invalid prompt template: expected object");
   }
@@ -78,14 +83,18 @@ export function validatePromptTemplate(input: unknown): PromptTemplateDefinition
 
   if (
     !Array.isArray(variablesValue)
-    || variablesValue.some((item) => typeof item !== "string" || item.trim() === "")
+    || variablesValue.some((item) =>
+      typeof item !== "string" || item.trim() === ""
+    )
   ) {
     throw new Error("invalid variables: expected non-empty string array");
   }
 
   for (const variable of variablesValue) {
     if (!template.includes(`{{${variable}}}`)) {
-      throw new Error(`template is missing parser placeholder for variable: ${variable}`);
+      throw new Error(
+        `template is missing parser placeholder for variable: ${variable}`,
+      );
     }
   }
 
@@ -109,15 +118,21 @@ export function validateThemeDefinition(input: unknown): ThemeDefinition {
     if (name.trim() === "") {
       throw new Error("invalid color key: expected non-empty key");
     }
-    if (typeof value !== "string" || !/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value)) {
-      throw new Error(`invalid color value for ${name}: expected hex color string`);
+    if (
+      typeof value !== "string" || !/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value)
+    ) {
+      throw new Error(
+        `invalid color value for ${name}: expected hex color string`,
+      );
     }
   }
 
   return {
     id,
     label,
-    colors: Object.fromEntries(Object.entries(colors).map(([k, v]) => [k, String(v)])),
+    colors: Object.fromEntries(
+      Object.entries(colors).map(([k, v]) => [k, String(v)]),
+    ),
   };
 }
 
@@ -125,7 +140,9 @@ export function discoverSkills(payloads: string[]): SkillDefinition[] {
   return payloads.map((payload) => validateSkillDefinition(parseJson(payload)));
 }
 
-export function discoverPromptTemplates(payloads: string[]): PromptTemplateDefinition[] {
+export function discoverPromptTemplates(
+  payloads: string[],
+): PromptTemplateDefinition[] {
   return payloads.map((payload) => validatePromptTemplate(parseJson(payload)));
 }
 

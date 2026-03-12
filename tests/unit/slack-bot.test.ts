@@ -30,9 +30,8 @@ describe("InMemorySlackBot", () => {
 
   test("routeEvent throws when bot is not running", async () => {
     await bot.stop();
-    expect(() =>
-      bot.routeEvent({ channel: "C1", user: "U1", text: "msg" })
-    ).toThrow("Bot is not running");
+    expect(() => bot.routeEvent({ channel: "C1", user: "U1", text: "msg" }))
+      .toThrow("Bot is not running");
   });
 
   test("routeEvent creates new channel state on first event", () => {
