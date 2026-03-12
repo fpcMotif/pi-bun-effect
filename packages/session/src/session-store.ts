@@ -99,7 +99,7 @@ function toEntry(value: unknown): JsonlSessionEntry {
   return candidate as JsonlSessionEntry;
 }
 
-function readJsonl(text: string): ParsedSession {
+async function readJsonl(text: string): Promise<ParsedSession> {
   const lines = text.split(/\r?\n/).filter(Boolean);
   if (lines.length === 0) {
     throw new Error("Session file is empty");
@@ -124,15 +124,14 @@ function readJsonl(text: string): ParsedSession {
 
   const entries: JsonlSessionEntry[] = [];
   for (let i = 1; i < lines.length; i++) {
+    if (i % 1000 === 0) {
+      // Yield to the event loop every 1000 lines to prevent blocking
+      await new Promise((resolve) => setImmediate(resolve));
+    }
     const line = lines[i];
-    if (line === undefined) {
-      continue;
-    }
-
+    if (line === undefined) continue;
     const parsed = parseJsonLine(line, i);
-    if (parsed === null) {
-      continue;
-    }
+    if (parsed === null) continue;
     entries.push(toEntry(parsed));
   }
 
@@ -208,7 +207,7 @@ export class JsonlSessionStore implements SessionStore {
 
   async migrate(path: string): Promise<SessionVersion> {
     const raw = await readFile(path, "utf8");
-    const parsed = readJsonl(raw);
+    const parsed = await readJsonl(raw);
     await this.migrateInternal(path, parsed);
     return 3;
   }
@@ -298,7 +297,7 @@ export class JsonlSessionStore implements SessionStore {
   private async readAllInternal(path: string): Promise<ParsedSession> {
     await this.open(path);
     const raw = await readFile(path, "utf8");
-    const parsed = readJsonl(raw);
+    const parsed = await readJsonl(raw);
     if (parsed.header.version !== 3) {
       return this.migrateInternal(path, parsed);
     }
