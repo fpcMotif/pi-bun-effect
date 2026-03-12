@@ -9,6 +9,7 @@ import {
   loadFromGit,
   loadFromNpm,
 } from "../../packages/extensions/src/index";
+import type { Capability } from "../../packages/extensions/src/policy";
 
 test("conformance: runtime services register commands/hooks and expose ui prompt callback", async () => {
   const runtime = createRuntimeServices();
@@ -37,7 +38,7 @@ test("conformance: runtime services register commands/hooks and expose ui prompt
   const context = {
     extensionId: "ext-runtime",
     sessionId: "s1",
-    capabilities: new Set(),
+    capabilities: new Set<Capability>(),
   };
 
   const commandResult = await runtime.executeCommand("hello", context, [
