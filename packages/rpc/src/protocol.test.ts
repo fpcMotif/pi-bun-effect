@@ -24,11 +24,11 @@ test("JsonRpcProtocol does not throw and returns null when logger is not provide
 });
 
 test("JsonRpcProtocol truncates long lines in log", () => {
-    const logger = new InMemoryLogger();
-    const protocol = createRpcProtocol(logger);
+  const logger = new InMemoryLogger();
+  const protocol = createRpcProtocol(logger);
 
-    const longLine = "{" + "a".repeat(200);
-    protocol.parseLine(longLine);
+  const longLine = "{" + "a".repeat(200);
+  protocol.parseLine(longLine);
 
-    expect(logger.entries[0].data?.line).toBe(longLine.substring(0, 100) + "...");
+  expect(logger.entries[0].data?.line).toBe(longLine.substring(0, 100) + "...");
 });
