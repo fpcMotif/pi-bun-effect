@@ -1,4 +1,4 @@
-import type { AgentMessage, QueueBehavior } from "@pi-bun-effect/core";
+import type { AgentMessage, Logger, QueueBehavior } from "@pi-bun-effect/core";
 
 export const RPC_COMMANDS = [
   "prompt",
@@ -82,6 +82,8 @@ export interface RpcProtocol {
 }
 
 export class JsonRpcProtocol implements RpcProtocol {
+  constructor(private readonly logger?: Logger) {}
+
   parseLine(line: string): RpcRequest | null {
     const trimmed = line.trim();
     if (!trimmed) {
@@ -91,7 +93,13 @@ export class JsonRpcProtocol implements RpcProtocol {
     let parsed: unknown;
     try {
       parsed = JSON.parse(trimmed);
-    } catch {
+    } catch (e) {
+      if (this.logger) {
+        this.logger.debug("Failed to parse JSON RPC line", {
+          error: e instanceof Error ? e.message : String(e),
+          line: trimmed.substring(0, 100),
+        });
+      }
       return null;
     }
 
@@ -128,6 +136,6 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-export function createRpcProtocol(): RpcProtocol {
-  return new JsonRpcProtocol();
+export function createRpcProtocol(logger?: Logger): RpcProtocol {
+  return new JsonRpcProtocol(logger);
 }
