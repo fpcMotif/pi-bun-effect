@@ -66,19 +66,29 @@ export class InMemorySkillsDiscovery implements SkillsDiscovery {
         continue;
       }
 
-      for (const entry of items) {
-        if (!entry.isDirectory()) continue;
-        const dirPath = join(resolved, entry.name);
+      const parsedItems = await Promise.all(
+        items.map(async (entry) => {
+          if (!entry.isDirectory()) return [];
+          const dirPath = join(resolved, entry.name);
 
-        for (const [marker, type] of Object.entries(MARKER_FILES)) {
-          const markerPath = join(dirPath, marker);
-          try {
-            const meta = await parseMetadata(markerPath, type);
-            this.registry.set(meta.name, meta);
-            results.push(meta);
-          } catch {
-            // marker not found, skip
-          }
+          const markerResults = await Promise.all(
+            Object.entries(MARKER_FILES).map(async ([marker, type]) => {
+              const markerPath = join(dirPath, marker);
+              try {
+                return await parseMetadata(markerPath, type);
+              } catch {
+                return null;
+              }
+            }),
+          );
+          return markerResults.filter((m) => m !== null) as SkillMetadata[];
+        }),
+      );
+
+      for (const metas of parsedItems) {
+        for (const meta of metas) {
+          this.registry.set(meta.name, meta);
+          results.push(meta);
         }
       }
     }
