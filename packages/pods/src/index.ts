@@ -36,6 +36,14 @@ function isValidHostname(host: string): boolean {
   return VALID_HOSTNAME.test(host) && host.length <= 253;
 }
 
+export function validateModelId(modelId: string): string {
+  const safeModelId = modelId.replace(/[^a-zA-Z0-9._:/-]/g, "");
+  if (!safeModelId || safeModelId !== modelId) {
+    throw new Error(`Invalid model ID: ${modelId}`);
+  }
+  return safeModelId;
+}
+
 function defaultRunner(command: string[]): Promise<CommandResult> {
   if (typeof Bun === "undefined") {
     return Promise.resolve({ stdout: "", stderr: "", exitCode: 0 });
@@ -76,13 +84,16 @@ export class InMemoryPodManager implements PodManager {
     if (!this.podConfig) {
       throw new Error("pod not configured");
     }
+    const safeModelId = validateModelId(modelId);
     const result = this.options.commandRunner
-      ? await this.options.commandRunner.run(this.renderStartCommand(modelId))
-      : await defaultRunner(this.buildStartArgs(modelId));
+      ? await this.options.commandRunner.run(
+        this.renderStartCommand(safeModelId),
+      )
+      : await defaultRunner(this.buildStartArgs(safeModelId));
     if (result.exitCode !== 0) {
       throw new Error(`start model failed: ${result.stderr || result.stdout}`);
     }
-    this.activeModels.add(modelId);
+    this.activeModels.add(safeModelId);
   }
 
   async stopModel(modelId: string): Promise<void> {
@@ -113,16 +124,19 @@ export class InMemoryPodManager implements PodManager {
     if (!this.podConfig) {
       throw new Error("pod not configured");
     }
-    const safeModelId = modelId.replace(/[^a-zA-Z0-9._:/-]/g, "");
-    if (!safeModelId || safeModelId !== modelId) {
-      throw new Error(`Invalid model ID: ${modelId}`);
-    }
+    const safeModelId = validateModelId(modelId);
     return [
-      "python3", "-m", "vllm.entrypoints.openai.api_server",
-      "--model", JSON.stringify(safeModelId),
-      "--host", "0.0.0.0",
-      "--port", "11434",
-      "--max-num-seqs", "32",
+      "python3",
+      "-m",
+      "vllm.entrypoints.openai.api_server",
+      "--model",
+      JSON.stringify(safeModelId),
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "11434",
+      "--max-num-seqs",
+      "32",
     ].join(" ");
   }
 
