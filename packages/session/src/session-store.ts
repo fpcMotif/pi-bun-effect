@@ -99,7 +99,7 @@ function toEntry(value: unknown): JsonlSessionEntry {
   return candidate as JsonlSessionEntry;
 }
 
-function readJsonl(text: string): ParsedSession {
+async function readJsonl(text: string): Promise<ParsedSession> {
   const lines = text.split(/\r?\n/).filter(Boolean);
   if (lines.length === 0) {
     throw new Error("Session file is empty");
@@ -123,6 +123,7 @@ function readJsonl(text: string): ParsedSession {
   };
 
   const entries: JsonlSessionEntry[] = [];
+  // Prevent blocking the event loop on very large files
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
     if (line === undefined) {
@@ -130,10 +131,14 @@ function readJsonl(text: string): ParsedSession {
     }
 
     const parsed = parseJsonLine(line, i);
-    if (parsed === null) {
-      continue;
+    if (parsed !== null) {
+      entries.push(toEntry(parsed));
     }
-    entries.push(toEntry(parsed));
+
+    // Yield back to the event loop every 5000 lines
+    if (i % 5000 === 0) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
   }
 
   return { header, entries };
@@ -208,7 +213,7 @@ export class JsonlSessionStore implements SessionStore {
 
   async migrate(path: string): Promise<SessionVersion> {
     const raw = await readFile(path, "utf8");
-    const parsed = readJsonl(raw);
+    const parsed = await readJsonl(raw);
     await this.migrateInternal(path, parsed);
     return 3;
   }
@@ -298,7 +303,7 @@ export class JsonlSessionStore implements SessionStore {
   private async readAllInternal(path: string): Promise<ParsedSession> {
     await this.open(path);
     const raw = await readFile(path, "utf8");
-    const parsed = readJsonl(raw);
+    const parsed = await readJsonl(raw);
     if (parsed.header.version !== 3) {
       return this.migrateInternal(path, parsed);
     }
