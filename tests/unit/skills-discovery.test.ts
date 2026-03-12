@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -27,10 +27,12 @@ test("skills discovery scans directories for SKILL.md markers", async () => {
 });
 
 test("skills discovery handles empty and missing directories", async () => {
+  const consoleSpy = spyOn(console, "error").mockImplementation(() => {});
   const discovery = createSkillsDiscovery();
   const results = await discovery.scan(["/tmp/nonexistent-dir-pi-bun-test"]);
   expect(results.length).toBe(0);
   expect(discovery.list().length).toBe(0);
+  consoleSpy.mockRestore();
 });
 
 test("skills discovery detects prompt and theme types", async () => {

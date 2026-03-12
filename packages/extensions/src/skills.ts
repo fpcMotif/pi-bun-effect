@@ -62,7 +62,8 @@ export class InMemorySkillsDiscovery implements SkillsDiscovery {
           name: String(d.name),
           isDirectory: () => d.isDirectory(),
         }));
-      } catch {
+      } catch (error) {
+        console.error(`Failed to read directory ${resolved}:`, error);
         continue;
       }
 
@@ -76,7 +77,13 @@ export class InMemorySkillsDiscovery implements SkillsDiscovery {
             const meta = await parseMetadata(markerPath, type);
             this.registry.set(meta.name, meta);
             results.push(meta);
-          } catch {
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+              console.error(
+                `Failed to parse metadata from ${markerPath}:`,
+                error,
+              );
+            }
             // marker not found, skip
           }
         }
