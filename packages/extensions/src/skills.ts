@@ -62,7 +62,8 @@ export class InMemorySkillsDiscovery implements SkillsDiscovery {
           name: String(d.name),
           isDirectory: () => d.isDirectory(),
         }));
-      } catch {
+      } catch (error) {
+        console.error(`Failed to read directory ${resolved}:`, error);
         continue;
       }
 
