@@ -1,5 +1,5 @@
-import type { Capability } from "../../packages/extensions/src/index";
 import { expect, test } from "bun:test";
+import type { Capability } from "../../packages/extensions/src/index";
 import {
   checkActivationPolicy,
   createPolicyEngine,
