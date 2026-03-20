@@ -28,6 +28,13 @@ export interface ActivationCheckResult {
   reason?: string;
 }
 
+function getPolicySubjectId(source: ExtensionSource): string {
+  if (source.type === "npm" || source.type === "git") {
+    return `${source.type}:${source.reference}`;
+  }
+  return source.manifest.id;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -152,14 +159,16 @@ export async function checkActivationPolicy(
   engine: PolicyEngine,
   policy?: ExtensionPolicy,
 ): Promise<ActivationCheckResult> {
-  if (policy && policy.extensionId !== source.manifest.id) {
+  const subjectId = getPolicySubjectId(source);
+
+  if (policy && policy.extensionId !== subjectId) {
     return {
       allowed: false,
-      reason: "policy extension id does not match manifest id",
+      reason: "policy extension id does not match source identity",
     };
   }
 
-  const trust = await engine.getTrust(source.manifest.id);
+  const trust = await engine.getTrust(subjectId);
   if (!isTrustAllowed(trust.decision)) {
     return {
       allowed: false,
@@ -168,7 +177,7 @@ export async function checkActivationPolicy(
   }
 
   for (const capability of source.manifest.capabilities) {
-    if (!engine.evaluateCapability(source.manifest.id, capability)) {
+    if (!engine.evaluateCapability(subjectId, capability)) {
       return {
         allowed: false,
         reason: `capability denied by policy engine: ${capability}`,

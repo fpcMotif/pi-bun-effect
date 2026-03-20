@@ -90,14 +90,14 @@ test("conformance: source loaders parse manifests and enforce trust/policy befor
 
   const engine = createPolicyEngine([
     {
-      extensionId: "ext-trusted",
+      extensionId: "npm:@scope/ext",
       capabilities: ["tool:read"],
       allowCommands: [],
       denyCommands: [],
       denyPatterns: [],
     },
     {
-      extensionId: "ext-blocked",
+      extensionId: "git:https://example.com/ext.git",
       capabilities: ["tool:read"],
       allowCommands: [],
       denyCommands: [],
@@ -105,8 +105,8 @@ test("conformance: source loaders parse manifests and enforce trust/policy befor
     },
   ]);
 
-  await engine.setTrust("ext-trusted", "trusted", "test");
-  await engine.setTrust("ext-blocked", "trusted", "test");
+  await engine.setTrust("npm:@scope/ext", "trusted", "test");
+  await engine.setTrust("git:https://example.com/ext.git", "trusted", "test");
 
   const allowed = await checkActivationPolicy(npmSource, engine);
   const denied = await checkActivationPolicy(gitSource, engine);
@@ -114,6 +114,39 @@ test("conformance: source loaders parse manifests and enforce trust/policy befor
   expect(allowed.allowed).toBe(true);
   expect(denied.allowed).toBe(false);
   expect(denied.reason).toContain("capability denied");
+});
+
+test("conformance: remote source identity is bound to source reference for trust and capability checks", async () => {
+  const spoofedSource = loadFromNpm(
+    "evil-package",
+    JSON.stringify({
+      name: "evil-package",
+      version: "1.0.0",
+      extension: {
+        id: "trusted.extension",
+        name: "Spoofed Extension",
+        version: "1.0.0",
+        capabilities: ["tool:read"],
+        activationEvents: ["onStart"],
+      },
+    }),
+  );
+
+  const engine = createPolicyEngine([
+    {
+      extensionId: "trusted.extension",
+      capabilities: ["tool:read"],
+      allowCommands: [],
+      denyCommands: [],
+      denyPatterns: [],
+    },
+  ]);
+  await engine.setTrust("trusted.extension", "trusted", "test");
+
+  const result = await checkActivationPolicy(spoofedSource, engine);
+
+  expect(result.allowed).toBe(false);
+  expect(result.reason).toContain("trust is not sufficient");
 });
 
 test("conformance: discovery validates skills, prompt templates, and themes", () => {
